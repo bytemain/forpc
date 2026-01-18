@@ -174,6 +174,12 @@ func (p *RpcPeer) unaryRawWithMetadata(method string, meta map[string]string, pa
 	streamID := p.allocStreamID()
 
 	pc := &pendingCall{unaryCh: make(chan resultBytes, 1)}
+	cleanup := true
+	defer func() {
+		if cleanup {
+			p.removePending(streamID)
+		}
+	}()
 	p.pendingMu.Lock()
 	p.pending[streamID] = pc
 	p.pendingMu.Unlock()
@@ -181,28 +187,24 @@ func (p *RpcPeer) unaryRawWithMetadata(method string, meta map[string]string, pa
 	call := Call{Method: method, Metadata: meta}
 	hdrPayload, err := p.protoMarshal(&call)
 	if err != nil {
-		p.removePending(streamID)
 		return nil, err
 	}
 	if err := p.sendPacket(Packet{StreamID: streamID, Kind: FrameHeaders, Payload: hdrPayload}); err != nil {
-		p.removePending(streamID)
 		return nil, err
 	}
 	if err := p.sendPacket(Packet{StreamID: streamID, Kind: FrameData, Payload: payload}); err != nil {
-		p.removePending(streamID)
 		return nil, err
 	}
 
 	eos := StatusOKValue()
 	trPayload, err := p.protoMarshal(&eos)
 	if err != nil {
-		p.removePending(streamID)
 		return nil, err
 	}
 	if err := p.sendPacket(Packet{StreamID: streamID, Kind: FrameTrailers, Payload: trPayload}); err != nil {
-		p.removePending(streamID)
 		return nil, err
 	}
+	cleanup = false
 
 	res := <-pc.unaryCh
 	if res.err != nil {
@@ -216,6 +218,12 @@ func (p *RpcPeer) streamInternal(method string, meta map[string]string) (uint32,
 
 	ch := make(chan Packet, 32)
 	pc := &pendingCall{streamCh: ch}
+	cleanup := true
+	defer func() {
+		if cleanup {
+			p.removePending(streamID)
+		}
+	}()
 	p.pendingMu.Lock()
 	p.pending[streamID] = pc
 	p.pendingMu.Unlock()
@@ -223,13 +231,12 @@ func (p *RpcPeer) streamInternal(method string, meta map[string]string) (uint32,
 	call := Call{Method: method, Metadata: meta}
 	hdrPayload, err := p.protoMarshal(&call)
 	if err != nil {
-		p.removePending(streamID)
 		return 0, nil, err
 	}
 	if err := p.sendPacket(Packet{StreamID: streamID, Kind: FrameHeaders, Payload: hdrPayload}); err != nil {
-		p.removePending(streamID)
 		return 0, nil, err
 	}
+	cleanup = false
 
 	return streamID, ch, nil
 }

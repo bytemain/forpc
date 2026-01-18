@@ -251,6 +251,25 @@ impl RpcPeer {
         self.transport.send(bytes).await.map_err(|e| RpcError::new(StatusCode::UNAVAILABLE, e.to_string()))?;
         Ok(())
     }
+
+    async fn insert_pending_call(&self, stream_id: u32, pending_call: PendingCall) {
+        let mut pending = self.pending_calls.lock().await;
+        pending.insert(stream_id, pending_call);
+    }
+
+    async fn remove_pending_call(&self, stream_id: u32) {
+        let mut pending = self.pending_calls.lock().await;
+        pending.remove(&stream_id);
+    }
+
+    async fn send_call_headers(&self, stream_id: u32, call: &Call) -> RpcResult<()> {
+        let packet = {
+            let mut f = self.proto_fory.lock().await;
+            Packet::headers(stream_id, call, &mut f)
+                .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?
+        };
+        self.send_packet(packet).await
+    }
     
     pub async fn stream<Req, Resp>(self: &Arc<Self>, method: &str) -> RpcResult<BidiStream<Req, Resp>>
     where Req: Serializer + Send + Sync + 'static, Resp: Serializer + ForyDefault + Send + Sync + 'static
@@ -274,26 +293,19 @@ impl RpcPeer {
         };
 
         let (tx, rx) = mpsc::channel(32);
-        {
-            let mut pending = self.pending_calls.lock().await;
-            pending.insert(
+        self
+            .insert_pending_call(
                 stream_id,
                 PendingCall {
                     tx: None,
                     stream_tx: Some(tx),
                     unary_buffer: None,
                 },
-            );
-        }
+            )
+            .await;
 
-        let packet = {
-            let mut f = self.proto_fory.lock().await;
-            Packet::headers(stream_id, &call, &mut f)
-                .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?
-        };
-        if let Err(e) = self.send_packet(packet).await {
-            let mut pending = self.pending_calls.lock().await;
-            pending.remove(&stream_id);
+        if let Err(e) = self.send_call_headers(stream_id, &call).await {
+            self.remove_pending_call(stream_id).await;
             return Err(e);
         }
 
@@ -321,21 +333,11 @@ impl RpcPeer {
         Req: Serializer + Send + Sync + 'static,
         Resp: Serializer + ForyDefault + Send + Sync + 'static,
     {
-        let payload = {
-            let f = self.user_fory.lock().await;
-            Bytes::from(
-                f.serialize(&request)
-                    .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?,
-            )
-        };
+        let payload = self.user_serialize(&request).await?;
         let resp_bytes = self
             .unary_exchange_raw_with_metadata(method, payload, metadata)
             .await?;
-
-        let f = self.user_fory.lock().await;
-        let mut reader = fory::Reader::new(&resp_bytes);
-        f.deserialize_from(&mut reader)
-            .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))
+        self.user_deserialize(&resp_bytes).await
     }
 
     pub async fn call_raw(&self, method: &str, payload: Bytes) -> RpcResult<Bytes> {
@@ -365,44 +367,29 @@ impl RpcPeer {
         };
 
         let (tx, rx) = oneshot::channel();
-        {
-            let mut pending = self.pending_calls.lock().await;
-            pending.insert(
+        self
+            .insert_pending_call(
                 stream_id,
                 PendingCall {
                     tx: Some(tx),
                     stream_tx: None,
                     unary_buffer: None,
                 },
-            );
-        }
+            )
+            .await;
 
-        let packet = {
-            let mut f = self.proto_fory.lock().await;
-            Packet::headers(stream_id, &call, &mut f)
-                .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?
-        };
-        if let Err(e) = self.send_packet(packet).await {
-            let mut pending = self.pending_calls.lock().await;
-            pending.remove(&stream_id);
+        if let Err(e) = self.send_call_headers(stream_id, &call).await {
+            self.remove_pending_call(stream_id).await;
             return Err(e);
         }
 
         if let Err(e) = self.send_packet(Packet::data(stream_id, payload)).await {
-            let mut pending = self.pending_calls.lock().await;
-            pending.remove(&stream_id);
+            self.remove_pending_call(stream_id).await;
             return Err(e);
         }
 
-        let eos = Status::ok();
-        let packet = {
-            let mut f = self.proto_fory.lock().await;
-            Packet::trailers(stream_id, &eos, &mut f)
-                .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?
-        };
-        if let Err(e) = self.send_packet(packet).await {
-            let mut pending = self.pending_calls.lock().await;
-            pending.remove(&stream_id);
+        if let Err(e) = self.send_stream_trailers(stream_id, &Status::ok()).await {
+            self.remove_pending_call(stream_id).await;
             return Err(e);
         }
 

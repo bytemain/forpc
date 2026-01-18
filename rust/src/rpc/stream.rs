@@ -6,7 +6,6 @@ use super::peer::RpcPeer;
 use super::protocol::{Packet, Status, frame_kind};
 use super::error::{RpcError, RpcResult};
 use super::status::StatusCode;
-use bytes::Bytes;
 
 pub struct BidiStream<Req, Resp> {
     pub(crate) stream_id: u32,
@@ -17,12 +16,8 @@ pub struct BidiStream<Req, Resp> {
 
 impl<Req: Serializer + Send + Sync + 'static, Resp: Serializer + ForyDefault + Send + Sync + 'static> BidiStream<Req, Resp> {
     pub async fn send(&self, message: Req) -> RpcResult<()> {
-        let payload = {
-            let fory = self.peer.user_fory.lock().await;
-            Bytes::from(fory.serialize(&message).map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?)
-        };
-        
-        self.peer.send_packet(Packet::data(self.stream_id, payload)).await
+        let payload = self.peer.user_serialize(&message).await?;
+        self.peer.send_stream_data(self.stream_id, payload).await
     }
     
     pub async fn recv(&mut self) -> RpcResult<Option<Resp>> {
@@ -30,10 +25,7 @@ impl<Req: Serializer + Send + Sync + 'static, Resp: Serializer + ForyDefault + S
             Some(packet) => {
                 match packet.kind {
                     frame_kind::DATA => {
-                        let mut reader = Reader::new(&packet.payload);
-                        let fory = self.peer.user_fory.lock().await;
-                        let msg: Resp = fory.deserialize_from(&mut reader)
-                             .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?;
+                        let msg: Resp = self.peer.user_deserialize(&packet.payload).await?;
                         Ok(Some(msg))
                     }
                     frame_kind::TRAILERS => {
@@ -56,11 +48,8 @@ impl<Req: Serializer + Send + Sync + 'static, Resp: Serializer + ForyDefault + S
     }
     
     pub async fn close_send(&self) -> RpcResult<()> {
-        let status = Status::ok();
-        let packet = {
-            let mut fory = self.peer.proto_fory.lock().await;
-            Packet::trailers(self.stream_id, &status, &mut fory).map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?
-        };
-        self.peer.send_packet(packet).await
+        self.peer
+            .send_stream_trailers(self.stream_id, &Status::ok())
+            .await
     }
 }
