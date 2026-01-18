@@ -593,11 +593,16 @@ class Peer {
   }
 
   static async connect(url) {
-    const inner = await NativePeer.connect(url)
-    if (!inner) {
-      throw new Error('Failed to create Peer binding')
+    try {
+      const inner = await NativePeer.connect(url)
+      if (!inner) {
+        throw new Error('Failed to create Peer binding')
+      }
+      return new Peer(inner)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`Failed to connect Peer: ${message}`)
     }
-    return new Peer(inner)
   }
 
   callRaw(method, payload) {
@@ -621,11 +626,16 @@ class RawServer {
   }
 
   static listen(url, method, handler) {
-    const inner = NativeRawServer.listen(url, method, handler)
-    if (!inner) {
-      throw new Error('Failed to create RawServer binding')
+    try {
+      const inner = NativeRawServer.listen(url, method, handler)
+      if (!inner) {
+        throw new Error('Failed to create RawServer binding')
+      }
+      return new RawServer(inner)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`Failed to listen RawServer: ${message}`)
     }
-    return new RawServer(inner)
   }
 
   static listenFory(url, method, serializer, handler) {
