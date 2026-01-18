@@ -57,7 +57,7 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@furyjs/fury": "^0.0.18"
+    "@apache-fory/fory": "^0.14.1"
   },
   "devDependencies": {
     "@emnapi/core": "^1.5.0",

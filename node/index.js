@@ -561,7 +561,7 @@ module.exports.Peer = nativeBinding.Peer
 module.exports.RawServer = nativeBinding.RawServer
 module.exports.plus100 = nativeBinding.plus100
 
-const { default: Fory, Type } = require('@furyjs/fury')
+const { default: Fory, Type } = require('@apache-fory/fory')
 
 const ensureForySerializer = (serializer) => {
   if (!serializer || typeof serializer.serialize !== 'function' || typeof serializer.deserialize !== 'function') {
