@@ -565,7 +565,7 @@ const { default: Fory, Type } = require('@furyjs/fury')
 
 const ensureForySerializer = (serializer) => {
   if (!serializer || typeof serializer.serialize !== 'function' || typeof serializer.deserialize !== 'function') {
-    throw new TypeError('Invalid fory serializer')
+    throw new TypeError('Invalid Fory serializer')
   }
 }
 
@@ -595,6 +595,9 @@ module.exports.RawServer.listenFory = function listenFory(url, method, serialize
   ensureForySerializer(serializer)
   return module.exports.RawServer.listen(url, method, (payload) => {
     const response = handler(serializer.deserialize(payload))
+    if (response && typeof response.then === 'function') {
+      throw new TypeError('listenFory handler must return a value synchronously')
+    }
     return toBuffer(serializer.serialize(response))
   })
 }
