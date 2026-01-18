@@ -68,9 +68,19 @@ echo "build: rust examples"
 echo "build: go examples"
 (cd "$repo_root/go" && go build -o "$tmp_dir/go_serve" ./examples/interop_echo_server)
 (cd "$repo_root/go" && go build -o "$tmp_dir/go_call" ./examples/interop_echo_client)
+(cd "$repo_root/go" && go build -o "$tmp_dir/go_raw_serve" ./examples/interop_raw_echo_server)
+(cd "$repo_root/go" && go build -o "$tmp_dir/go_raw_call" ./examples/interop_raw_echo_client)
+
+echo "build: node addon"
+(cd "$repo_root/node" && yarn run build:debug >/dev/null)
 
 rust_echo_server="$repo_root/rust/target/debug/examples/interop_echo_server"
 rust_echo_client="$repo_root/rust/target/debug/examples/interop_echo_client"
+rust_raw_echo_server="$repo_root/rust/target/debug/examples/interop_raw_echo_server"
+rust_raw_echo_client="$repo_root/rust/target/debug/examples/interop_raw_echo_client"
+
+node_raw_server="node $repo_root/node/scripts/interop_raw_echo_server.js"
+node_raw_client="node $repo_root/node/scripts/interop_raw_echo_client.js"
 
 run_with_retries() {
   local name="$1"
@@ -137,5 +147,65 @@ wait_port 127.0.0.1 "$port" 15
 out="$("$rust_echo_client" "$url" "Hello")"
 echo "$out" | grep -q "reply: Hello"
 echo "ok: rust server -> rust client"
+
+stop_pids
+
+echo "case: rust raw server -> node raw client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+"$rust_raw_echo_server" "$url" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$($node_raw_client "$url" "Raw/Echo" "Hello")"
+echo "$out" | grep -q "reply: Hello"
+echo "ok: rust raw server -> node raw client"
+
+stop_pids
+
+echo "case: node raw server -> rust raw client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+$node_raw_server "$url" "Raw/Echo" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$("$rust_raw_echo_client" "$url" "Raw/Echo" "HelloNode")"
+echo "$out" | grep -q "reply: HelloNode"
+echo "ok: node raw server -> rust raw client"
+
+stop_pids
+
+echo "case: go raw server -> node raw client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+"$tmp_dir/go_raw_serve" --listen "$url" --method "Raw/Echo" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$($node_raw_client "$url" "Raw/Echo" "Hello")"
+echo "$out" | grep -q "reply: Hello"
+echo "ok: go raw server -> node raw client"
+
+stop_pids
+
+echo "case: node raw server -> go raw client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+$node_raw_server "$url" "Raw/Echo" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$("$tmp_dir/go_raw_call" --connect "$url" --method "Raw/Echo" --msg "HelloNode")"
+echo "$out" | grep -q "reply: HelloNode"
+echo "ok: node raw server -> go raw client"
+
+stop_pids
+
+echo "case: node raw server -> node raw client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+$node_raw_server "$url" "Raw/Echo" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$($node_raw_client "$url" "Raw/Echo" "HelloNode")"
+echo "$out" | grep -q "reply: HelloNode"
+echo "ok: node raw server -> node raw client"
 
 echo "all ok"

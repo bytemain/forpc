@@ -24,6 +24,7 @@ pub struct RpcPeer {
     pub(crate) handlers: Arc<RwLock<HashMap<String, BoxedHandler>>>,
     pub(crate) pending_calls: Arc<Mutex<HashMap<u32, PendingCall>>>,
     pub(crate) inbound_streams: Arc<Mutex<HashMap<u32, StreamState>>>,
+    pub(crate) early_inbound: Arc<Mutex<HashMap<u32, Vec<Packet>>>>,
     next_stream_id: AtomicU32,
     is_initiator: bool,
     pub(crate) proto_fory: Arc<Mutex<Fory>>,
@@ -145,6 +146,7 @@ impl RpcPeer {
             handlers: Arc::new(RwLock::new(HashMap::new())),
             pending_calls: Arc::new(Mutex::new(HashMap::new())),
             inbound_streams: Arc::new(Mutex::new(HashMap::new())),
+            early_inbound: Arc::new(Mutex::new(HashMap::new())),
             next_stream_id: AtomicU32::new(if is_initiator { 1 } else { 2 }),
             is_initiator,
             proto_fory: Arc::new(Mutex::new(proto_fory)),
@@ -383,6 +385,68 @@ impl RpcPeer {
         f.deserialize_from(&mut reader)
             .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))
     }
+
+    pub async fn call_raw(&self, method: &str, payload: Bytes) -> RpcResult<Bytes> {
+        self.call_raw_with_metadata(method, payload, HashMap::new()).await
+    }
+
+    pub async fn call_raw_with_metadata(
+        &self,
+        method: &str,
+        payload: Bytes,
+        metadata: HashMap<String, String>,
+    ) -> RpcResult<Bytes> {
+        let stream_id = self.alloc_stream_id();
+        let call = Call {
+            method: method.to_string(),
+            metadata,
+        };
+
+        let (tx, rx) = oneshot::channel();
+        {
+            let mut pending = self.pending_calls.lock().await;
+            pending.insert(
+                stream_id,
+                PendingCall {
+                    tx: Some(tx),
+                    stream_tx: None,
+                    unary_buffer: None,
+                },
+            );
+        }
+
+        let packet = {
+            let mut f = self.proto_fory.lock().await;
+            Packet::headers(stream_id, &call, &mut f)
+                .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?
+        };
+        if let Err(e) = self.send_packet(packet).await {
+            let mut pending = self.pending_calls.lock().await;
+            pending.remove(&stream_id);
+            return Err(e);
+        }
+
+        if let Err(e) = self.send_packet(Packet::data(stream_id, payload)).await {
+            let mut pending = self.pending_calls.lock().await;
+            pending.remove(&stream_id);
+            return Err(e);
+        }
+
+        let eos = Status::ok();
+        let packet = {
+            let mut f = self.proto_fory.lock().await;
+            Packet::trailers(stream_id, &eos, &mut f)
+                .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?
+        };
+        if let Err(e) = self.send_packet(packet).await {
+            let mut pending = self.pending_calls.lock().await;
+            pending.remove(&stream_id);
+            return Err(e);
+        }
+
+        rx.await
+            .map_err(|_| RpcError::new(StatusCode::CANCELLED, "Call cancelled"))?
+    }
     
     pub async fn serve(self: &Arc<Self>) -> RpcResult<()> {
         while self.running.load(Ordering::Relaxed) {
@@ -443,6 +507,23 @@ impl RpcPeer {
                         let mut streams = self.inbound_streams.lock().await;
                         streams.insert(stream_id, StreamState { tx: tx.clone() });
                     }
+
+                    if let Some(buffered) = {
+                        let mut early = self.early_inbound.lock().await;
+                        early.remove(&stream_id)
+                    } {
+                        for pkt in buffered {
+                            if pkt.kind == frame_kind::TRAILERS {
+                                let mut streams = self.inbound_streams.lock().await;
+                                if let Some(state) = streams.remove(&stream_id) {
+                                    let _ = state.tx.send(pkt).await;
+                                }
+                                break;
+                            } else {
+                                let _ = tx.send(pkt).await;
+                            }
+                        }
+                    }
                     
                     let req = Request {
                         method: call.method,
@@ -464,16 +545,30 @@ impl RpcPeer {
                 }
             }
             frame_kind::DATA | frame_kind::TRAILERS => {
-                let mut streams = self.inbound_streams.lock().await;
-                // If TRAILERS, remove from map
-                if packet.kind == frame_kind::TRAILERS {
-                    if let Some(state) = streams.remove(&stream_id) {
-                         let _ = state.tx.send(packet).await;
+                let mut packet_opt = Some(packet);
+                let delivered = {
+                    let mut streams = self.inbound_streams.lock().await;
+                    let packet = packet_opt.as_ref().unwrap();
+                    if packet.kind == frame_kind::TRAILERS {
+                        if let Some(state) = streams.remove(&stream_id) {
+                            let _ = state.tx.send(packet_opt.take().unwrap()).await;
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        if let Some(state) = streams.get_mut(&stream_id) {
+                            let _ = state.tx.send(packet_opt.take().unwrap()).await;
+                            true
+                        } else {
+                            false
+                        }
                     }
-                } else {
-                    if let Some(state) = streams.get_mut(&stream_id) {
-                         let _ = state.tx.send(packet).await;
-                    }
+                };
+
+                if !delivered {
+                    let mut early = self.early_inbound.lock().await;
+                    early.entry(stream_id).or_default().push(packet_opt.take().unwrap());
                 }
             }
             _ => {}

@@ -197,6 +197,51 @@ func (p *RpcPeer) CallWithMetadata(method string, req any, meta map[string]strin
 	return p.userUnmarshal(res.b, resp)
 }
 
+func (p *RpcPeer) CallRaw(method string, payload []byte) ([]byte, error) {
+	return p.CallRawWithMetadata(method, payload, map[string]string{})
+}
+
+func (p *RpcPeer) CallRawWithMetadata(method string, payload []byte, meta map[string]string) ([]byte, error) {
+	streamID := p.allocStreamID()
+
+	pc := &pendingCall{unaryCh: make(chan resultBytes, 1)}
+	p.pendingMu.Lock()
+	p.pending[streamID] = pc
+	p.pendingMu.Unlock()
+
+	call := Call{Method: method, Metadata: meta}
+	hdrPayload, err := p.protoMarshal(&call)
+	if err != nil {
+		p.removePending(streamID)
+		return nil, err
+	}
+	if err := p.sendPacket(Packet{StreamID: streamID, Kind: FrameHeaders, Payload: hdrPayload}); err != nil {
+		p.removePending(streamID)
+		return nil, err
+	}
+	if err := p.sendPacket(Packet{StreamID: streamID, Kind: FrameData, Payload: payload}); err != nil {
+		p.removePending(streamID)
+		return nil, err
+	}
+
+	eos := StatusOKValue()
+	trPayload, err := p.protoMarshal(&eos)
+	if err != nil {
+		p.removePending(streamID)
+		return nil, err
+	}
+	if err := p.sendPacket(Packet{StreamID: streamID, Kind: FrameTrailers, Payload: trPayload}); err != nil {
+		p.removePending(streamID)
+		return nil, err
+	}
+
+	res := <-pc.unaryCh
+	if res.err != nil {
+		return nil, res.err
+	}
+	return res.b, nil
+}
+
 func (p *RpcPeer) streamInternal(method string, meta map[string]string) (uint32, <-chan Packet, error) {
 	streamID := p.allocStreamID()
 
