@@ -14,7 +14,7 @@ use bytes::Bytes;
 use tokio::sync::{mpsc, Mutex, RwLock};
 use uuid::Uuid;
 
-use mini_rpc::transport::nng::{ClientTransport, Transport};
+use forpc::transport::nng::{ClientTransport, Transport};
 
 #[derive(Clone)]
 struct AppState {
@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .unwrap_or_else(|| "127.0.0.1:3000".to_string());
     let upstream_url = args
         .next()
-        .unwrap_or_else(|| "ipc:///tmp/mini_rpc_upstream.ipc".to_string());
+        .unwrap_or_else(|| "ipc:///tmp/forpc_upstream.ipc".to_string());
 
     let state = AppState {
         upstream_url,

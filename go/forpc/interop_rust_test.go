@@ -1,6 +1,6 @@
 //go:build integration
 
-package minirpc
+package forpc
 
 import (
 	"bytes"
@@ -36,8 +36,8 @@ func TestInteropRustGoUnary(t *testing.T) {
 	}
 	defer c.Close()
 
-	_ = RegisterTypeByNamespace[interopEchoRequest](c, "mini_rpc.it", "EchoRequest")
-	_ = RegisterTypeByNamespace[interopEchoResponse](c, "mini_rpc.it", "EchoResponse")
+	_ = RegisterTypeByNamespace[interopEchoRequest](c, "forpc.it", "EchoRequest")
+	_ = RegisterTypeByNamespace[interopEchoResponse](c, "forpc.it", "EchoResponse")
 
 	go func() { _ = c.Serve() }()
 

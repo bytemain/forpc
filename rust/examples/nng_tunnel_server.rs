@@ -3,7 +3,7 @@ use std::env;
 use std::sync::Arc;
 
 use fory::ForyObject;
-use mini_rpc::{Request, Response, RpcListener, RpcPeer, Status, StatusCode};
+use forpc::{Request, Response, RpcListener, RpcPeer, Status, StatusCode};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[derive(ForyObject, Debug, Clone)]
@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let listener = RpcListener::bind(&listen_url).await?;
     loop {
         let peer = listener.accept().await?;
-        peer.register_type_by_namespace::<TcpChunk>("mini_rpc.tunnel", "TcpChunk")
+        peer.register_type_by_namespace::<TcpChunk>("forpc.tunnel", "TcpChunk")
             .await?;
 
         peer.register("Tunnel/Tcp", tunnel_tcp).await;
@@ -63,22 +63,22 @@ async fn tunnel_tcp(req: Request, peer: Arc<RpcPeer>) -> Response {
     let t_in = tokio::spawn(async move {
         while let Some(pkt) = rx.recv().await {
             match pkt.kind {
-                mini_rpc::rpc::protocol::frame_kind::DATA => {
+                forpc::rpc::protocol::frame_kind::DATA => {
                     let chunk: TcpChunk = peer_in.user_deserialize(&pkt.payload).await?;
                     if !chunk.data.is_empty() {
                         w.write_all(&chunk.data).await.map_err(|e| {
-                            mini_rpc::RpcError::new(StatusCode::UNAVAILABLE, e.to_string())
+                            forpc::RpcError::new(StatusCode::UNAVAILABLE, e.to_string())
                         })?;
                     }
                 }
-                mini_rpc::rpc::protocol::frame_kind::TRAILERS => {
+                forpc::rpc::protocol::frame_kind::TRAILERS => {
                     let _ = w.shutdown().await;
                     break;
                 }
                 _ => {}
             }
         }
-        Ok::<(), mini_rpc::RpcError>(())
+        Ok::<(), forpc::RpcError>(())
     });
 
     let peer_out = peer.clone();
@@ -86,7 +86,7 @@ async fn tunnel_tcp(req: Request, peer: Arc<RpcPeer>) -> Response {
         let mut buf = [0u8; 16 * 1024];
         loop {
             let n = r.read(&mut buf).await.map_err(|e| {
-                mini_rpc::RpcError::new(StatusCode::UNAVAILABLE, e.to_string())
+                forpc::RpcError::new(StatusCode::UNAVAILABLE, e.to_string())
             })?;
             if n == 0 {
                 break;
@@ -98,7 +98,7 @@ async fn tunnel_tcp(req: Request, peer: Arc<RpcPeer>) -> Response {
                 .await?;
             peer_out.send_stream_data(stream_id, payload).await?;
         }
-        Ok::<(), mini_rpc::RpcError>(())
+        Ok::<(), forpc::RpcError>(())
     });
 
     let r = tokio::select! {

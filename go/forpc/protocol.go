@@ -1,4 +1,4 @@
-package minirpc
+package forpc
 
 import (
 	"encoding/binary"
@@ -53,4 +53,3 @@ func StatusOKValue() Status {
 func (s Status) IsOK() bool {
 	return s.Code == StatusOK
 }
-

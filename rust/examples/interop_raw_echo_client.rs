@@ -1,7 +1,7 @@
 use std::env;
 
 use bytes::Bytes;
-use mini_rpc::RpcPeer;
+use forpc::RpcPeer;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -23,4 +23,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("reply: {}", String::from_utf8_lossy(&resp));
     Ok(())
 }
-

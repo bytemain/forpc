@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/bytemain/mini-rpc/go/minirpc"
+	"github.com/bytemain/forpc/go/forpc"
 )
 
 type EchoRequest struct {
@@ -20,7 +20,7 @@ func main() {
 	url := flag.String("listen", "tcp://127.0.0.1:24000", "listen url")
 	flag.Parse()
 
-	l, err := minirpc.Bind(*url)
+	l, err := forpc.Bind(*url)
 	if err != nil {
 		log.Fatalf("bind: %v", err)
 	}
@@ -33,14 +33,14 @@ func main() {
 	}
 	defer p.Close()
 
-	if err := minirpc.RegisterTypeByNamespace[EchoRequest](p, "mini_rpc.it", "EchoRequest"); err != nil {
+	if err := forpc.RegisterTypeByNamespace[EchoRequest](p, "forpc.it", "EchoRequest"); err != nil {
 		log.Fatalf("register: %v", err)
 	}
-	if err := minirpc.RegisterTypeByNamespace[EchoResponse](p, "mini_rpc.it", "EchoResponse"); err != nil {
+	if err := forpc.RegisterTypeByNamespace[EchoResponse](p, "forpc.it", "EchoResponse"); err != nil {
 		log.Fatalf("register: %v", err)
 	}
 
-	minirpc.RegisterUnary[EchoRequest, EchoResponse](p, "Test/Echo", func(req *EchoRequest, _ map[string]string, _ *minirpc.RpcPeer) (*EchoResponse, *minirpc.RpcError) {
+	forpc.RegisterUnary[EchoRequest, EchoResponse](p, "Test/Echo", func(req *EchoRequest, _ map[string]string, _ *forpc.RpcPeer) (*EchoResponse, *forpc.RpcError) {
 		return &EchoResponse{Result: req.Data}, nil
 	})
 
@@ -48,4 +48,3 @@ func main() {
 		log.Fatalf("serve: %v", err)
 	}
 }
-

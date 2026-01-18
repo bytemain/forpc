@@ -1,4 +1,4 @@
-package minirpc
+package forpc
 
 import (
 	"errors"
@@ -62,4 +62,3 @@ func (s *BidiStream[Req, Resp]) CloseSend() error {
 	}
 	return s.peer.sendPacket(Packet{StreamID: s.streamID, Kind: FrameTrailers, Payload: payload})
 }
-

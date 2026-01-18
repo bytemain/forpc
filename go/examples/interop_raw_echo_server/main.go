@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/bytemain/mini-rpc/go/minirpc"
+	"github.com/bytemain/forpc/go/forpc"
 )
 
 func main() {
@@ -13,7 +13,7 @@ func main() {
 	method := flag.String("method", "Raw/Echo", "method")
 	flag.Parse()
 
-	l, err := minirpc.Bind(*url)
+	l, err := forpc.Bind(*url)
 	if err != nil {
 		log.Fatalf("bind: %v", err)
 	}
@@ -26,23 +26,22 @@ func main() {
 	}
 	defer p.Close()
 
-	p.Register(*method, func(req minirpc.Request, _ *minirpc.RpcPeer) minirpc.Response {
+	p.Register(*method, func(req forpc.Request, _ *forpc.RpcPeer) forpc.Response {
 		var payload []byte
 		for pkt := range req.Stream {
-			if pkt.Kind == minirpc.FrameData {
+			if pkt.Kind == forpc.FrameData {
 				payload = pkt.Payload
-			} else if pkt.Kind == minirpc.FrameTrailers {
+			} else if pkt.Kind == forpc.FrameTrailers {
 				break
 			}
 		}
 		if len(payload) == 0 {
-			return minirpc.ResponseError(minirpc.StatusInvalidArgument, "Missing payload")
+			return forpc.ResponseError(forpc.StatusInvalidArgument, "Missing payload")
 		}
-		return minirpc.ResponseOK(payload)
+		return forpc.ResponseOK(payload)
 	})
 
 	if err := p.Serve(); err != nil {
 		log.Fatalf("serve: %v", err)
 	}
 }
-

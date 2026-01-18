@@ -1,7 +1,7 @@
 use std::env;
 
 use fory::ForyObject;
-use mini_rpc::RpcListener;
+use forpc::RpcListener;
 
 #[derive(ForyObject, Debug, Clone, PartialEq)]
 struct TestRequest {
@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut args = env::args().skip(1);
     let url = args
         .next()
-        .unwrap_or_else(|| "ipc:///tmp/mini_rpc_upstream.ipc".to_string());
+        .unwrap_or_else(|| "ipc:///tmp/forpc_upstream.ipc".to_string());
 
     let listener = RpcListener::bind(&url).await?;
     loop {

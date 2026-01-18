@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/bytemain/mini-rpc/go/minirpc"
+	"github.com/bytemain/forpc/go/forpc"
 )
 
 func main() {
@@ -14,7 +14,7 @@ func main() {
 	msg := flag.String("msg", "Hello", "message")
 	flag.Parse()
 
-	p, err := minirpc.ConnectWithRetry(*url, 50)
+	p, err := forpc.ConnectWithRetry(*url, 50)
 	if err != nil {
 		log.Fatalf("connect: %v", err)
 	}
@@ -28,4 +28,3 @@ func main() {
 	}
 	fmt.Printf("reply: %s\n", string(b))
 }
-

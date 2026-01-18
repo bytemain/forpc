@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
-use mini_rpc::{RpcListener, RpcPeer};
+use forpc::{RpcListener, RpcPeer};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -12,10 +12,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut args = env::args().skip(1);
     let listen_url = args
         .next()
-        .unwrap_or_else(|| "ipc:///tmp/mini_rpc_proxy.ipc".to_string());
+        .unwrap_or_else(|| "ipc:///tmp/forpc_proxy.ipc".to_string());
     let upstream_url = args
         .next()
-        .unwrap_or_else(|| "ipc:///tmp/mini_rpc_upstream.ipc".to_string());
+        .unwrap_or_else(|| "ipc:///tmp/forpc_upstream.ipc".to_string());
 
     let listener = RpcListener::bind(&listen_url).await?;
 

@@ -1,10 +1,10 @@
-package minirpc
+package forpc
 
 import (
 	"errors"
 	"sync"
 
-	mangostransport "github.com/bytemain/mini-rpc/go/transport/mangos"
+	mangostransport "github.com/bytemain/forpc/go/transport/mangos"
 )
 
 type RpcListener struct {
@@ -112,4 +112,3 @@ func (l *RpcListener) loop() {
 		}
 	}
 }
-

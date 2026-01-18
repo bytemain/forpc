@@ -1,4 +1,4 @@
-package minirpc
+package forpc
 
 import "fmt"
 
@@ -14,4 +14,3 @@ func (e *RpcError) Error() string {
 func NewRpcError(code uint32, message string) *RpcError {
 	return &RpcError{Code: code, Message: message}
 }
-

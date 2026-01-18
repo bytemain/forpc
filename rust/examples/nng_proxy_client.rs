@@ -2,7 +2,7 @@ use std::env;
 use std::sync::Arc;
 
 use fory::ForyObject;
-use mini_rpc::RpcPeer;
+use forpc::RpcPeer;
 
 #[derive(ForyObject, Debug, Clone, PartialEq)]
 struct TestRequest {
@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut args = env::args().skip(1);
     let proxy_url = args
         .next()
-        .unwrap_or_else(|| "ipc:///tmp/mini_rpc_proxy.ipc".to_string());
+        .unwrap_or_else(|| "ipc:///tmp/forpc_proxy.ipc".to_string());
 
     let peer = RpcPeer::connect_with_retry(&proxy_url, 10).await?;
     peer.register_type::<TestRequest>(4).await?;
@@ -45,4 +45,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("{}", resp.result);
     Ok(())
 }
-

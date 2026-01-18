@@ -362,7 +362,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn dealer_router_smoke() -> Result<(), BoxError> {
-        let url = format!("inproc://mini_rpc_transport_smoke_{}", std::process::id());
+        let url = format!("inproc://forpc_transport_smoke_{}", std::process::id());
 
         tokio::spawn({
             let url = url.clone();

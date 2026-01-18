@@ -1,4 +1,4 @@
-package minirpc
+package forpc
 
 const (
 	StatusOK                 uint32 = 0
@@ -19,4 +19,3 @@ const (
 	StatusDataLoss           uint32 = 15
 	StatusUnauthenticated    uint32 = 16
 )
-

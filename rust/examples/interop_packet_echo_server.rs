@@ -5,7 +5,7 @@ use std::sync::Arc;
 use bytes::Bytes;
 use tokio::sync::{mpsc, Mutex};
 
-use mini_rpc::transport::nng::{AsyncRouter, InboundFrame, ServerTransport, Transport};
+use forpc::transport::nng::{AsyncRouter, InboundFrame, ServerTransport, Transport};
 
 fn decode_packet(data: &[u8]) -> Option<(u32, u8, &[u8])> {
     if data.len() < 5 {
@@ -77,4 +77,3 @@ async fn echo_loop(transport: ServerTransport) -> Result<(), Box<dyn std::error:
         transport.send(out).await?;
     }
 }
-

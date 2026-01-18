@@ -1,4 +1,4 @@
-package minirpc
+package forpc
 
 import (
 	"testing"
@@ -14,7 +14,7 @@ type testResponse struct {
 }
 
 func TestUnaryCallInproc(t *testing.T) {
-	url := "inproc://mini_rpc_go_unary"
+	url := "inproc://forpc_go_unary"
 
 	l, err := Bind(url)
 	if err != nil {
@@ -27,8 +27,8 @@ func TestUnaryCallInproc(t *testing.T) {
 		if err != nil {
 			return
 		}
-		_ = RegisterTypeByNamespace[testRequest](p, "mini_rpc.test", "TestRequest")
-		_ = RegisterTypeByNamespace[testResponse](p, "mini_rpc.test", "TestResponse")
+		_ = RegisterTypeByNamespace[testRequest](p, "forpc.test", "TestRequest")
+		_ = RegisterTypeByNamespace[testResponse](p, "forpc.test", "TestResponse")
 
 		RegisterUnary[testRequest, testResponse](p, "Test/Echo", func(req *testRequest, _ map[string]string, _ *RpcPeer) (*testResponse, *RpcError) {
 			return &testResponse{Result: req.Data}, nil
@@ -43,8 +43,8 @@ func TestUnaryCallInproc(t *testing.T) {
 	}
 	defer c.Close()
 
-	_ = RegisterTypeByNamespace[testRequest](c, "mini_rpc.test", "TestRequest")
-	_ = RegisterTypeByNamespace[testResponse](c, "mini_rpc.test", "TestResponse")
+	_ = RegisterTypeByNamespace[testRequest](c, "forpc.test", "TestRequest")
+	_ = RegisterTypeByNamespace[testResponse](c, "forpc.test", "TestResponse")
 
 	go func() { _ = c.Serve() }()
 
@@ -75,7 +75,7 @@ type chatMessage struct {
 }
 
 func TestBidiStreamInproc(t *testing.T) {
-	url := "inproc://mini_rpc_go_bidi"
+	url := "inproc://forpc_go_bidi"
 
 	l, err := Bind(url)
 	if err != nil {
@@ -88,7 +88,7 @@ func TestBidiStreamInproc(t *testing.T) {
 		if err != nil {
 			return
 		}
-		_ = RegisterTypeByNamespace[chatMessage](p, "mini_rpc.test", "ChatMessage")
+		_ = RegisterTypeByNamespace[chatMessage](p, "forpc.test", "ChatMessage")
 		p.Register("Chat/Connect", func(r Request, peer *RpcPeer) Response {
 			for pkt := range r.Stream {
 				if pkt.Kind != FrameData {
@@ -114,7 +114,7 @@ func TestBidiStreamInproc(t *testing.T) {
 		t.Fatalf("connect: %v", err)
 	}
 	defer c.Close()
-	_ = RegisterTypeByNamespace[chatMessage](c, "mini_rpc.test", "ChatMessage")
+	_ = RegisterTypeByNamespace[chatMessage](c, "forpc.test", "ChatMessage")
 
 	go func() { _ = c.Serve() }()
 

@@ -1,4 +1,4 @@
-package minirpc
+package forpc
 
 func RegisterUnary[Req any, Resp any](peer *RpcPeer, method string, h func(*Req, map[string]string, *RpcPeer) (*Resp, *RpcError)) {
 	peer.Register(method, func(r Request, p *RpcPeer) Response {

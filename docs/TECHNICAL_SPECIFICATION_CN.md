@@ -1099,7 +1099,7 @@ impl RpcPeer {
 // 示例: 代理服务场景
 // =============================================================================
 
-use mini_rpc::{RpcPeer, RpcListener, Request, Response, RpcResult};
+use forpc::{RpcPeer, RpcListener, Request, Response, RpcResult};
 
 // ============= 消息定义 =============
 
@@ -1131,10 +1131,10 @@ async fn run_client() -> RpcResult<()> {
     // 连接到代理服务
     let peer = RpcPeer::connect("ipc:///tmp/proxy.ipc").await?;
 
-    peer.register_type_by_namespace::<ProxySendRequest>("mini_rpc.example", "ProxySendRequest").await?;
-    peer.register_type_by_namespace::<ProxySendResponse>("mini_rpc.example", "ProxySendResponse").await?;
-    peer.register_type_by_namespace::<GetConfigRequest>("mini_rpc.example", "GetConfigRequest").await?;
-    peer.register_type_by_namespace::<ClientConfig>("mini_rpc.example", "ClientConfig").await?;
+    peer.register_type_by_namespace::<ProxySendRequest>("forpc.example", "ProxySendRequest").await?;
+    peer.register_type_by_namespace::<ProxySendResponse>("forpc.example", "ProxySendResponse").await?;
+    peer.register_type_by_namespace::<GetConfigRequest>("forpc.example", "GetConfigRequest").await?;
+    peer.register_type_by_namespace::<ClientConfig>("forpc.example", "ClientConfig").await?;
     
     // 注册本端服务（供代理服务回调）
     peer.register_unary("Client/GetConfig", |_req: GetConfigRequest, _meta, _peer| async move {
@@ -1174,10 +1174,10 @@ async fn run_server() -> RpcResult<()> {
         // 接受连接
         let peer = listener.accept().await?;
 
-        peer.register_type_by_namespace::<ProxySendRequest>("mini_rpc.example", "ProxySendRequest").await?;
-        peer.register_type_by_namespace::<ProxySendResponse>("mini_rpc.example", "ProxySendResponse").await?;
-        peer.register_type_by_namespace::<GetConfigRequest>("mini_rpc.example", "GetConfigRequest").await?;
-        peer.register_type_by_namespace::<ClientConfig>("mini_rpc.example", "ClientConfig").await?;
+        peer.register_type_by_namespace::<ProxySendRequest>("forpc.example", "ProxySendRequest").await?;
+        peer.register_type_by_namespace::<ProxySendResponse>("forpc.example", "ProxySendResponse").await?;
+        peer.register_type_by_namespace::<GetConfigRequest>("forpc.example", "GetConfigRequest").await?;
+        peer.register_type_by_namespace::<ClientConfig>("forpc.example", "ClientConfig").await?;
         
         // 注册代理服务
         peer.register_unary("Proxy/Send", |req: ProxySendRequest, _meta, peer| async move {

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use mini_rpc::{Request, Response, RpcListener, RpcPeer, StatusCode};
+use forpc::{Request, Response, RpcListener, RpcPeer, StatusCode};
 use napi::bindgen_prelude::{spawn, Buffer};
 use napi::threadsafe_function::ThreadsafeFunction;
 use napi::bindgen_prelude::Function;

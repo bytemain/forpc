@@ -1,7 +1,7 @@
 use std::env;
 
 use fory::ForyObject;
-use mini_rpc::RpcPeer;
+use forpc::RpcPeer;
 
 #[derive(ForyObject, Debug, Clone)]
 struct EchoRequest {
@@ -23,9 +23,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let peer = RpcPeer::connect_with_retry(&url, 50).await?;
 
-    peer.register_type_by_namespace::<EchoRequest>("mini_rpc.it", "EchoRequest")
+    peer.register_type_by_namespace::<EchoRequest>("forpc.it", "EchoRequest")
         .await?;
-    peer.register_type_by_namespace::<EchoResponse>("mini_rpc.it", "EchoResponse")
+    peer.register_type_by_namespace::<EchoResponse>("forpc.it", "EchoResponse")
         .await?;
 
     let peer_clone = peer.clone();
@@ -43,4 +43,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("reply: {}", resp.result);
     Ok(())
 }
-

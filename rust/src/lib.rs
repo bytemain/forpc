@@ -29,7 +29,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_bidi_call() -> Result<(), BoxError> {
-        let socket_path = format!("/tmp/test_mini_rpc_{}.ipc", std::process::id());
+        let socket_path = format!("/tmp/test_forpc_{}.ipc", std::process::id());
         let url = format!("ipc://{}", socket_path);
         let url_server = url.clone();
         

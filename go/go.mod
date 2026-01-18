@@ -1,4 +1,4 @@
-module github.com/bytemain/mini-rpc/go
+module github.com/bytemain/forpc/go
 
 go 1.24.0
 

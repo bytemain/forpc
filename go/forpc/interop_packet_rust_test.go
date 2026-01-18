@@ -1,6 +1,6 @@
 //go:build integration
 
-package minirpc
+package forpc
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	mangostransport "github.com/bytemain/mini-rpc/go/transport/mangos"
+	mangostransport "github.com/bytemain/forpc/go/transport/mangos"
 )
 
 func TestInteropRustGoPacketEcho(t *testing.T) {

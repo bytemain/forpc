@@ -4,7 +4,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
 use fory::ForyObject;
-use mini_rpc::{BidiStream, RpcPeer};
+use forpc::{BidiStream, RpcPeer};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[derive(ForyObject, Debug, Clone)]
@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .unwrap_or_else(|| "tcp://127.0.0.1:4000".to_string());
 
     let peer = RpcPeer::connect_with_retry(&server_url, 10).await?;
-    peer.register_type_by_namespace::<TcpChunk>("mini_rpc.tunnel", "TcpChunk")
+    peer.register_type_by_namespace::<TcpChunk>("forpc.tunnel", "TcpChunk")
         .await?;
     let peer = peer;
 

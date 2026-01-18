@@ -2,7 +2,7 @@ use bytes::Bytes;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 
-use mini_rpc::transport::nng::Transport;
+use forpc::transport::nng::Transport;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectResponse {
@@ -76,4 +76,3 @@ impl Transport for HttpProxyTransport {
         }
     }
 }
-

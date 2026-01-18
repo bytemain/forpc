@@ -1,4 +1,4 @@
-package minirpc
+package forpc
 
 import (
 	"errors"
@@ -8,8 +8,8 @@ import (
 
 	"github.com/apache/fory/go/fory"
 
-	"github.com/bytemain/mini-rpc/go/transport"
-	mangostransport "github.com/bytemain/mini-rpc/go/transport/mangos"
+	"github.com/bytemain/forpc/go/transport"
+	mangostransport "github.com/bytemain/forpc/go/transport/mangos"
 )
 
 type Request struct {

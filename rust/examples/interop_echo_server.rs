@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use bytes::Bytes;
 use fory::ForyObject;
-use mini_rpc::{RpcPeer};
-use mini_rpc::transport::nng::{AsyncRouter, InboundFrame, ServerTransport};
+use forpc::RpcPeer;
+use forpc::transport::nng::{AsyncRouter, InboundFrame, ServerTransport};
 use tokio::sync::{mpsc, Mutex};
 use std::collections::HashMap;
 
@@ -105,9 +105,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     while let Some(peer) = accept_rx.recv().await {
         println!("interop_echo_server: accepted");
 
-        peer.register_type_by_namespace::<EchoRequest>("mini_rpc.it", "EchoRequest")
+        peer.register_type_by_namespace::<EchoRequest>("forpc.it", "EchoRequest")
             .await?;
-        peer.register_type_by_namespace::<EchoResponse>("mini_rpc.it", "EchoResponse")
+        peer.register_type_by_namespace::<EchoResponse>("forpc.it", "EchoResponse")
             .await?;
 
         peer.register_unary("Test/Echo", |req: EchoRequest, _meta, _peer| async move {

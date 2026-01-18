@@ -2,7 +2,7 @@ use std::env;
 use std::sync::Arc;
 
 use fory::ForyObject;
-use mini_rpc::RpcPeer;
+use forpc::RpcPeer;
 
 #[path = "http_proxy/common.rs"]
 mod http_proxy_common;

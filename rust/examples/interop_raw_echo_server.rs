@@ -2,7 +2,7 @@ use std::env;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use mini_rpc::{Request, Response, RpcListener, RpcPeer, StatusCode};
+use forpc::{Request, Response, RpcListener, RpcPeer, StatusCode};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -35,4 +35,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     peer.serve().await?;
     Ok(())
 }
-
