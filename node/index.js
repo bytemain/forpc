@@ -557,11 +557,11 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
-module.exports.Peer = nativeBinding.Peer
-module.exports.RawServer = nativeBinding.RawServer
 module.exports.plus100 = nativeBinding.plus100
 
 const { default: Fory, Type } = require('@apache-fory/fory')
+const NativePeer = nativeBinding.Peer
+const NativeRawServer = nativeBinding.RawServer
 
 const ensureForySerializer = (serializer) => {
   if (!serializer || typeof serializer.serialize !== 'function' || typeof serializer.deserialize !== 'function') {
@@ -584,20 +584,44 @@ module.exports.Type = Type
 module.exports.Fory = Fory
 module.exports.createForySerializer = createForySerializer
 
-module.exports.Peer.prototype.call = async function call(method, payload, serializer) {
-  ensureForySerializer(serializer)
-  const bytes = toBuffer(serializer.serialize(payload))
-  const response = await this.callRaw(method, bytes)
-  return serializer.deserialize(response)
+class Peer {
+  constructor(inner) {
+    this._inner = inner
+  }
+
+  static async connect(url) {
+    const inner = await NativePeer.connect(url)
+    return new Peer(inner)
+  }
+
+  callRaw(method, payload) {
+    return this._inner.callRaw(method, payload)
+  }
+
+  async call(method, payload, serializer) {
+    ensureForySerializer(serializer)
+    const bytes = toBuffer(serializer.serialize(payload))
+    const response = await this.callRaw(method, bytes)
+    return serializer.deserialize(response)
+  }
 }
 
-module.exports.RawServer.listenFory = function listenFory(url, method, serializer, handler) {
-  ensureForySerializer(serializer)
-  return module.exports.RawServer.listen(url, method, (payload) => {
-    const response = handler(serializer.deserialize(payload))
-    if (response && typeof response.then === 'function') {
-      throw new TypeError('listenFory handler must return a value synchronously')
-    }
-    return toBuffer(serializer.serialize(response))
-  })
+class RawServer {
+  static listen(url, method, handler) {
+    return NativeRawServer.listen(url, method, handler)
+  }
+
+  static listenFory(url, method, serializer, handler) {
+    ensureForySerializer(serializer)
+    return RawServer.listen(url, method, (payload) => {
+      const response = handler(serializer.deserialize(payload))
+      if (response && typeof response.then === 'function') {
+        throw new TypeError('listenFory handler must return a value synchronously')
+      }
+      return toBuffer(serializer.serialize(response))
+    })
+  }
 }
+
+module.exports.Peer = Peer
+module.exports.RawServer = RawServer
