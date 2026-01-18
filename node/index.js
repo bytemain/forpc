@@ -594,6 +594,9 @@ class Peer {
 
   static async connect(url) {
     const inner = await NativePeer.connect(url)
+    if (!inner) {
+      throw new Error('Failed to create Peer binding')
+    }
     return new Peer(inner)
   }
 
@@ -619,6 +622,9 @@ class RawServer {
 
   static listen(url, method, handler) {
     const inner = NativeRawServer.listen(url, method, handler)
+    if (!inner) {
+      throw new Error('Failed to create RawServer binding')
+    }
     return new RawServer(inner)
   }
 
