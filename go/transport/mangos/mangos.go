@@ -55,11 +55,11 @@ func DialWithRetry(url string, maxRetries uint32, retryDelay time.Duration) (*De
 
 func (d *Dealer) Send(body []byte) (uint32, error) {
 	reqID := d.nextRequestID.Add(1) | 0x80000000
-	msg := mangos.NewMessage(len(body))
-	msg.Body = append(msg.Body, body...)
 	var hdr [4]byte
 	binary.BigEndian.PutUint32(hdr[:], reqID)
+	msg := mangos.NewMessage(4 + len(body))
 	msg.Header = append(msg.Header, hdr[:]...)
+	msg.Body = append(msg.Body, body...)
 	return reqID, d.sock.SendMsg(msg)
 }
 
