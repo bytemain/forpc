@@ -151,50 +151,15 @@ func (p *RpcPeer) Call(method string, req any, resp any) error {
 }
 
 func (p *RpcPeer) CallWithMetadata(method string, req any, meta map[string]string, resp any) error {
-	streamID := p.allocStreamID()
-
-	pc := &pendingCall{unaryCh: make(chan resultBytes, 1)}
-	p.pendingMu.Lock()
-	p.pending[streamID] = pc
-	p.pendingMu.Unlock()
-
-	call := Call{Method: method, Metadata: meta}
-	hdrPayload, err := p.protoMarshal(&call)
-	if err != nil {
-		p.removePending(streamID)
-		return err
-	}
-	if err := p.sendPacket(Packet{StreamID: streamID, Kind: FrameHeaders, Payload: hdrPayload}); err != nil {
-		p.removePending(streamID)
-		return err
-	}
-
 	dataPayload, err := p.userMarshal(req)
 	if err != nil {
-		p.removePending(streamID)
 		return err
 	}
-	if err := p.sendPacket(Packet{StreamID: streamID, Kind: FrameData, Payload: dataPayload}); err != nil {
-		p.removePending(streamID)
-		return err
-	}
-
-	eos := StatusOKValue()
-	trPayload, err := p.protoMarshal(&eos)
+	resBytes, err := p.unaryRawWithMetadata(method, meta, dataPayload)
 	if err != nil {
-		p.removePending(streamID)
 		return err
 	}
-	if err := p.sendPacket(Packet{StreamID: streamID, Kind: FrameTrailers, Payload: trPayload}); err != nil {
-		p.removePending(streamID)
-		return err
-	}
-
-	res := <-pc.unaryCh
-	if res.err != nil {
-		return res.err
-	}
-	return p.userUnmarshal(res.b, resp)
+	return p.userUnmarshal(resBytes, resp)
 }
 
 func (p *RpcPeer) CallRaw(method string, payload []byte) ([]byte, error) {
@@ -202,6 +167,10 @@ func (p *RpcPeer) CallRaw(method string, payload []byte) ([]byte, error) {
 }
 
 func (p *RpcPeer) CallRawWithMetadata(method string, payload []byte, meta map[string]string) ([]byte, error) {
+	return p.unaryRawWithMetadata(method, meta, payload)
+}
+
+func (p *RpcPeer) unaryRawWithMetadata(method string, meta map[string]string, payload []byte) ([]byte, error) {
 	streamID := p.allocStreamID()
 
 	pc := &pendingCall{unaryCh: make(chan resultBytes, 1)}

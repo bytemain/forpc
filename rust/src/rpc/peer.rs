@@ -321,36 +321,6 @@ impl RpcPeer {
         Req: Serializer + Send + Sync + 'static,
         Resp: Serializer + ForyDefault + Send + Sync + 'static,
     {
-        let stream_id = self.alloc_stream_id();
-        let call = Call {
-            method: method.to_string(),
-            metadata,
-        };
-
-        let (tx, rx) = oneshot::channel();
-        {
-            let mut pending = self.pending_calls.lock().await;
-            pending.insert(
-                stream_id,
-                PendingCall {
-                    tx: Some(tx),
-                    stream_tx: None,
-                    unary_buffer: None,
-                },
-            );
-        }
-
-        let packet = {
-            let mut f = self.proto_fory.lock().await;
-            Packet::headers(stream_id, &call, &mut f)
-                .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?
-        };
-        if let Err(e) = self.send_packet(packet).await {
-            let mut pending = self.pending_calls.lock().await;
-            pending.remove(&stream_id);
-            return Err(e);
-        }
-
         let payload = {
             let f = self.user_fory.lock().await;
             Bytes::from(
@@ -358,27 +328,9 @@ impl RpcPeer {
                     .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?,
             )
         };
-        if let Err(e) = self.send_packet(Packet::data(stream_id, payload)).await {
-            let mut pending = self.pending_calls.lock().await;
-            pending.remove(&stream_id);
-            return Err(e);
-        }
-
-        let eos = Status::ok();
-        let packet = {
-            let mut f = self.proto_fory.lock().await;
-            Packet::trailers(stream_id, &eos, &mut f)
-                .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?
-        };
-        if let Err(e) = self.send_packet(packet).await {
-            let mut pending = self.pending_calls.lock().await;
-            pending.remove(&stream_id);
-            return Err(e);
-        }
-
-        let resp_bytes = rx
-            .await
-            .map_err(|_| RpcError::new(StatusCode::CANCELLED, "Call cancelled"))??;
+        let resp_bytes = self
+            .unary_exchange_raw_with_metadata(method, payload, metadata)
+            .await?;
 
         let f = self.user_fory.lock().await;
         let mut reader = fory::Reader::new(&resp_bytes);
@@ -391,6 +343,16 @@ impl RpcPeer {
     }
 
     pub async fn call_raw_with_metadata(
+        &self,
+        method: &str,
+        payload: Bytes,
+        metadata: HashMap<String, String>,
+    ) -> RpcResult<Bytes> {
+        self.unary_exchange_raw_with_metadata(method, payload, metadata)
+            .await
+    }
+
+    async fn unary_exchange_raw_with_metadata(
         &self,
         method: &str,
         payload: Bytes,
