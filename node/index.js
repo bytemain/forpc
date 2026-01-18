@@ -605,7 +605,7 @@ class Peer {
       throw createNativeError('Failed to connect Peer', error)
     }
     if (!inner) {
-      throw new Error('Failed to connect Peer: empty binding')
+      throw new TypeError('Failed to connect Peer: invalid binding')
     }
     return new Peer(inner)
   }
@@ -631,7 +631,7 @@ class RawServer {
       throw createNativeError('Failed to listen RawServer', error)
     }
     if (!inner) {
-      throw new Error('Failed to listen RawServer: empty binding')
+      throw new TypeError('Failed to listen RawServer: invalid binding')
     }
     return inner
   }
