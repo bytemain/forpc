@@ -592,7 +592,7 @@ module.exports.createForySerializer = createForySerializer
 class Peer {
   constructor(inner) {
     if (!inner) {
-      throw new TypeError('Peer binding is required')
+      throw new TypeError('Peer inner instance is required')
     }
     this._inner = inner
   }
@@ -603,9 +603,6 @@ class Peer {
       inner = await NativePeer.connect(url)
     } catch (error) {
       throw createNativeError('Failed to connect Peer', error)
-    }
-    if (!inner) {
-      throw new TypeError('Failed to connect Peer: invalid binding')
     }
     return new Peer(inner)
   }
@@ -629,9 +626,6 @@ class RawServer {
       inner = NativeRawServer.listen(url, method, handler)
     } catch (error) {
       throw createNativeError('Failed to listen RawServer', error)
-    }
-    if (!inner) {
-      throw new TypeError('Failed to listen RawServer: invalid binding')
     }
     return inner
   }
