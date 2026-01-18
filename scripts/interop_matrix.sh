@@ -114,4 +114,28 @@ out="$("$rust_echo_client" "$url" "Hello")"
 echo "$out" | grep -q "reply: Hello"
 echo "ok: go server -> rust client"
 
+stop_pids
+
+echo "case: go server -> go client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+"$tmp_dir/go_serve" --listen "$url" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$("$tmp_dir/go_call" --connect "$url" --msg "Hello")"
+echo "$out" | grep -q "reply: Hello"
+echo "ok: go server -> go client"
+
+stop_pids
+
+echo "case: rust server -> rust client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+"$rust_echo_server" "$url" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$("$rust_echo_client" "$url" "Hello")"
+echo "$out" | grep -q "reply: Hello"
+echo "ok: rust server -> rust client"
+
 echo "all ok"
