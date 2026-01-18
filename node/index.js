@@ -593,12 +593,8 @@ class Peer {
   }
 
   static async connect(url) {
-    try {
-      const inner = await NativePeer.connect(url)
-      return new Peer(inner)
-    } catch (error) {
-      throw error instanceof Error ? error : new Error(String(error))
-    }
+    const inner = await NativePeer.connect(url)
+    return new Peer(inner)
   }
 
   callRaw(method, payload) {
