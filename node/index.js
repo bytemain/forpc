@@ -570,6 +570,11 @@ const ensureForySerializer = (serializer) => {
 }
 
 const toBuffer = (bytes) => (Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes))
+const createNativeError = (message, error) => {
+  const err = new Error(message)
+  err.cause = error instanceof Error ? error : new Error(String(error))
+  return err
+}
 
 const createForySerializer = (description, config) => {
   const fory = new Fory(config)
@@ -597,9 +602,7 @@ class Peer {
     try {
       inner = await NativePeer.connect(url)
     } catch (error) {
-      const err = new Error('Failed to connect Peer')
-      err.cause = error instanceof Error ? error : new Error(String(error))
-      throw err
+      throw createNativeError('Failed to connect Peer', error)
     }
     if (!inner) {
       throw new Error('Failed to connect Peer: empty binding')
@@ -620,26 +623,17 @@ class Peer {
 }
 
 class RawServer {
-  constructor(inner) {
-    if (!inner) {
-      throw new TypeError('RawServer binding is required')
-    }
-    this._inner = inner
-  }
-
   static listen(url, method, handler) {
     let inner
     try {
       inner = NativeRawServer.listen(url, method, handler)
     } catch (error) {
-      const err = new Error('Failed to listen RawServer')
-      err.cause = error instanceof Error ? error : new Error(String(error))
-      throw err
+      throw createNativeError('Failed to listen RawServer', error)
     }
     if (!inner) {
       throw new Error('Failed to listen RawServer: empty binding')
     }
-    return new RawServer(inner)
+    return inner
   }
 
   static listenFory(url, method, serializer, handler) {
