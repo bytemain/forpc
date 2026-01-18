@@ -73,8 +73,21 @@ cd rust
 cargo run --example interop_raw_echo_client -- tcp://127.0.0.1:24002 Raw/Echo HelloNode
 ```
 
+### Node.js 使用 JS 版 Fory（推荐）
+
+Node 侧只负责传输字节数据，类型定义与序列化由 JS 版 Fory 完成：
+
+```js
+const { Peer, Type, createForySerializer } = require('mini-rpc')
+
+const serializer = createForySerializer(
+  Type.object('echo', {
+    message: Type.string(),
+  }),
+)
+```
+
 ## 备注
 
 - 类型注册建议使用 `register_type_by_namespace(namespace, name)`，避免跨 crate/跨语言的 type id 冲突。
 - 当前实现以“可互通/可扩展”为优先，仍在快速迭代中；协议细节以 `docs/TECHNICAL_SPECIFICATION_CN.md` 为准。
-

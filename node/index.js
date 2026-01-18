@@ -560,3 +560,41 @@ module.exports = nativeBinding
 module.exports.Peer = nativeBinding.Peer
 module.exports.RawServer = nativeBinding.RawServer
 module.exports.plus100 = nativeBinding.plus100
+
+const { default: Fory, Type } = require('@furyjs/fury')
+
+const ensureForySerializer = (serializer) => {
+  if (!serializer || typeof serializer.serialize !== 'function' || typeof serializer.deserialize !== 'function') {
+    throw new TypeError('Invalid fory serializer')
+  }
+}
+
+const toBuffer = (bytes) => (Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes))
+
+const createForySerializer = (description, config) => {
+  const fory = new Fory(config)
+  const { serialize, deserialize } = fory.registerSerializer(description)
+  return {
+    serialize,
+    deserialize,
+  }
+}
+
+module.exports.Type = Type
+module.exports.Fory = Fory
+module.exports.createForySerializer = createForySerializer
+
+module.exports.Peer.prototype.call = async function call(method, payload, serializer) {
+  ensureForySerializer(serializer)
+  const bytes = toBuffer(serializer.serialize(payload))
+  const response = await this.callRaw(method, bytes)
+  return serializer.deserialize(response)
+}
+
+module.exports.RawServer.listenFory = function listenFory(url, method, serializer, handler) {
+  ensureForySerializer(serializer)
+  return module.exports.RawServer.listen(url, method, (payload) => {
+    const response = handler(serializer.deserialize(payload))
+    return toBuffer(serializer.serialize(response))
+  })
+}
