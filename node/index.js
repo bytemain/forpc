@@ -586,12 +586,19 @@ module.exports.createForySerializer = createForySerializer
 
 class Peer {
   constructor(inner) {
+    if (!inner) {
+      throw new TypeError('Peer binding is required')
+    }
     this._inner = inner
   }
 
   static async connect(url) {
-    const inner = await NativePeer.connect(url)
-    return new Peer(inner)
+    try {
+      const inner = await NativePeer.connect(url)
+      return new Peer(inner)
+    } catch (error) {
+      throw error instanceof Error ? error : new Error(String(error))
+    }
   }
 
   callRaw(method, payload) {
@@ -607,8 +614,16 @@ class Peer {
 }
 
 class RawServer {
+  constructor(inner) {
+    if (!inner) {
+      throw new TypeError('RawServer binding is required')
+    }
+    this._inner = inner
+  }
+
   static listen(url, method, handler) {
-    return NativeRawServer.listen(url, method, handler)
+    const inner = NativeRawServer.listen(url, method, handler)
+    return new RawServer(inner)
   }
 
   static listenFory(url, method, serializer, handler) {
