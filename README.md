@@ -1,36 +1,36 @@
 # forpc
 
-forpc 是一个基于 NNG（nanomsg-next-gen）传输、使用 Apache Fory 做跨语言序列化的轻量 RPC/Streaming 框架，目标是让 Rust/Go/Node.js 之间可以用同一套协议互通。
+forpc is a lightweight RPC/Streaming framework based on NNG (nanomsg-next-gen) transport, using Apache Fury for cross-language serialization. Its goal is to enable seamless communication between Rust/Go/Node.js using a unified protocol.
 
-## 特性
+## Features
 
-- 传输：NNG
-  - Rust：`anng`（nng-rs）
-  - Go：`mangos`（nanomsg over Go）
-- 序列化：Apache Fory（默认开启 `compatible + xlang`）
-- 调用模型
-  - Unary（一次请求/一次响应）
-  - Bidi streaming（按 stream_id 复用连接的 DATA/TRAILERS 帧流）
-  - Raw 调用（不做 Fory user payload 编解码，直接传 bytes）
-- 跨语言互通：Rust ↔ Go ↔ Node.js（Node 通过 napi-rs 绑定 Rust 实现）
+- Transport: NNG
+  - Rust: `anng` (nng-rs)
+  - Go: `mangos` (nanomsg over Go)
+- Serialization: Apache Fury (with `compatible + xlang` enabled by default)
+- Call Models
+  - Unary (single request/single response)
+  - Bidi streaming (DATA/TRAILERS frame streaming multiplexed by stream_id)
+  - Raw calls (no Fury user payload encoding/decoding, direct bytes transmission)
+- Cross-language interoperability: Rust ↔ Go ↔ Node.js (Node.js uses napi-rs bindings to Rust implementation)
 
-## 目录结构
+## Directory Structure
 
-- `rust/`：Rust 实现（crate: `forpc`）
-- `go/`：Go 实现（module: `github.com/bytemain/forpc/go`）
-- `node/`：Node.js 原生扩展（napi-rs，绑定 Rust `forpc`）
-- `scripts/interop_matrix.sh`：互通矩阵测试（client/server 笛卡尔积）
-- `docs/TECHNICAL_SPECIFICATION_CN.md`：协议与实现细节
+- `rust/`: Rust implementation (crate: `forpc`)
+- `go/`: Go implementation (module: `github.com/bytemain/forpc/go`)
+- `node/`: Node.js native extension (napi-rs, bindings to Rust `forpc`)
+- `scripts/interop_matrix.sh`: Interoperability matrix test (client/server Cartesian product)
+- `docs/TECHNICAL_SPECIFICATION_CN.md`: Protocol and implementation details
 
-## 快速验证（推荐）
+## Quick Verification (Recommended)
 
-直接跑互通矩阵：
+Run the interoperability matrix directly:
 
 ```bash
 bash scripts/interop_matrix.sh
 ```
 
-该脚本会构建 Rust/Go examples、构建 Node addon，并跑通：
+This script will build Rust/Go examples, build the Node addon, and run through:
 
 - Rust server → Go client
 - Go server → Rust client
@@ -42,23 +42,23 @@ bash scripts/interop_matrix.sh
 - Node raw server → Go raw client
 - Node raw server → Node raw client
 
-## 手动运行示例
+## Running Examples Manually
 
-### Rust server → Go client（Unary）
+### Rust server → Go client (Unary)
 
 ```bash
 cd rust
 cargo run --example interop_echo_server -- tcp://127.0.0.1:24000
 ```
 
-另开终端：
+In another terminal:
 
 ```bash
 cd go
 go run ./examples/interop_echo_client --connect tcp://127.0.0.1:24000 --msg Hello
 ```
 
-### Node server（JS handler）→ Rust client（Raw）
+### Node server (JS handler) → Rust client (Raw)
 
 ```bash
 cd node
@@ -66,15 +66,15 @@ yarn run build:debug
 node scripts/interop_raw_echo_server.js tcp://127.0.0.1:24002 Raw/Echo
 ```
 
-另开终端：
+In another terminal:
 
 ```bash
 cd rust
 cargo run --example interop_raw_echo_client -- tcp://127.0.0.1:24002 Raw/Echo HelloNode
 ```
 
-## 备注
+## Notes
 
-- 类型注册建议使用 `register_type_by_namespace(namespace, name)`，避免跨 crate/跨语言的 type id 冲突。
-- 当前实现以“可互通/可扩展”为优先，仍在快速迭代中；协议细节以 `docs/TECHNICAL_SPECIFICATION_CN.md` 为准。
+- Type registration is recommended using `register_type_by_namespace(namespace, name)` to avoid type id conflicts across crates/languages.
+- The current implementation prioritizes "interoperability/extensibility" and is still under rapid iteration; refer to `docs/TECHNICAL_SPECIFICATION_CN.md` for protocol details.
 
