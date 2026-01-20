@@ -2,6 +2,7 @@
 
 use std::ffi::CString;
 use std::io::Write;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 use anng::protocols::reqrep0::{Rep0Raw, Req0Raw};
@@ -10,6 +11,9 @@ use bytes::Bytes;
 use napi::bindgen_prelude::Buffer;
 use napi_derive::napi;
 use tokio::sync::Mutex;
+
+/// The high bit mask for request IDs, used to mark requests from this side
+const REQUEST_ID_HIGH_BIT: u32 = 0x8000_0000;
 
 #[napi]
 pub fn plus_100(input: u32) -> u32 {
@@ -21,7 +25,7 @@ pub fn plus_100(input: u32) -> u32 {
 #[napi]
 pub struct AsyncDealer {
   socket: Arc<Mutex<Socket<Req0Raw>>>,
-  next_request_id: Arc<std::sync::atomic::AtomicU32>,
+  next_request_id: AtomicU32,
 }
 
 #[napi]
@@ -35,17 +39,15 @@ impl AsyncDealer {
       .map_err(|e| napi::Error::from_reason(e.to_string()))?;
     Ok(Self {
       socket: Arc::new(Mutex::new(socket)),
-      next_request_id: Arc::new(std::sync::atomic::AtomicU32::new(0x80000000)),
+      next_request_id: AtomicU32::new(REQUEST_ID_HIGH_BIT),
     })
   }
 
   /// Send a message and return the request ID
   #[napi]
   pub async fn send(&self, body: Buffer) -> napi::Result<u32> {
-    let id = self
-      .next_request_id
-      .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let req_id = id | 0x80000000;
+    let id = self.next_request_id.fetch_add(1, Ordering::Relaxed);
+    let req_id = id | REQUEST_ID_HIGH_BIT;
 
     let body_bytes = body.as_ref();
     let mut msg = Message::with_capacity(body_bytes.len());
