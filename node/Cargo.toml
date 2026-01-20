@@ -12,7 +12,10 @@ crate-type = ["cdylib"]
 napi = { version = "3.0.0", features = ["tokio_rt"] }
 napi-derive = "3.0.0"
 bytes = "1"
-forpc = { path = "../rust" }
+# Disable default features to avoid pulling in rt-multi-thread from anng's tokio feature
+# napi's tokio_rt already provides the runtime
+anng = { git = "https://github.com/bytemain/nng-rs.git", branch = "main", default-features = false, features = ["vendored"] }
+tokio = { version = "1", default-features = false, features = ["sync"] }
 
 [build-dependencies]
 napi-build = "2"
