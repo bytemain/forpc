@@ -557,6 +557,8 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
-module.exports.Peer = nativeBinding.Peer
-module.exports.RawServer = nativeBinding.RawServer
+module.exports.AsyncDealer = nativeBinding.AsyncDealer
+module.exports.AsyncRouter = nativeBinding.AsyncRouter
+module.exports.DealerMessage = nativeBinding.DealerMessage
+module.exports.RouterMessage = nativeBinding.RouterMessage
 module.exports.plus100 = nativeBinding.plus100
