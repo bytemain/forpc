@@ -1,7 +1,13 @@
 name: CI
+
+defaults:
+  run:
+    shell: bash
+    working-directory: ./node
+
 env:
   DEBUG: napi:*
-  APP_NAME: mini-rpc
+  APP_NAME: forpc
   MACOSX_DEPLOYMENT_TARGET: '10.13'
   CARGO_INCREMENTAL: '1'
 'on':
