@@ -1,87 +1,108 @@
-# `@napi-rs/package-template`
+# forpc
+<p align="center">
+  <a href="./README_zh.md">简体中文</a>
+</p>
 
-![https://github.com/napi-rs/package-template/actions](https://github.com/napi-rs/package-template/workflows/CI/badge.svg)
+`forpc` is a high-performance Node.js native module built with [napi-rs](https://napi.rs/), providing asynchronous bindings for [nng](https://nng.nanomsg.org/) (nanomsg next generation). It focuses on providing high-performance, low-latency asynchronous network communication.
 
-> Template project for writing node packages with napi-rs.
+## Features
 
-# Usage
+- **High Performance**: Written in Rust, called with zero overhead via Node-API.
+- **Fully Asynchronous**: Deeply integrated with the Node.js event loop; all network IO operations are non-blocking and asynchronous.
+- **REQ/REP Pattern**: Provides implementation for `AsyncDealer` (client) and `AsyncRouter` (server).
+- **Multi-platform Support**: Pre-compiled support for Windows, macOS, Linux (x86_64 and arm64).
 
-1. Click **Use this template**.
-2. **Clone** your project.
-3. Run `yarn install` to install dependencies.
-4. Run `yarn napi rename -n [@your-scope/package-name] -b [binary-name]` command under the project folder to rename your package.
-
-## Install this test package
-
-```bash
-yarn add @napi-rs/package-template
-```
-
-## Ability
-
-### Build
-
-After `yarn build/npm run build` command, you can see `package-template.[darwin|win32|linux].node` file in project root. This is the native addon built from [lib.rs](./src/lib.rs).
-
-### Test
-
-With [ava](https://github.com/avajs/ava), run `yarn test/npm run test` to testing native addon. You can also switch to another testing framework if you want.
-
-### CI
-
-With GitHub Actions, each commit and pull request will be built and tested automatically in [`node@20`, `@node22`] x [`macOS`, `Linux`, `Windows`] matrix. You will never be afraid of the native addon broken in these platforms.
-
-### Release
-
-Release native package is very difficult in old days. Native packages may ask developers who use it to install `build toolchain` like `gcc/llvm`, `node-gyp` or something more.
-
-With `GitHub actions`, we can easily prebuild a `binary` for major platforms. And with `N-API`, we should never be afraid of **ABI Compatible**.
-
-The other problem is how to deliver prebuild `binary` to users. Downloading it in `postinstall` script is a common way that most packages do it right now. The problem with this solution is it introduced many other packages to download binary that has not been used by `runtime codes`. The other problem is some users may not easily download the binary from `GitHub/CDN` if they are behind a private network (But in most cases, they have a private NPM mirror).
-
-In this package, we choose a better way to solve this problem. We release different `npm packages` for different platforms. And add it to `optionalDependencies` before releasing the `Major` package to npm.
-
-`NPM` will choose which native package should download from `registry` automatically. You can see [npm](./npm) dir for details. And you can also run `yarn add @napi-rs/package-template` to see how it works.
-
-## Develop requirements
-
-- Install the latest `Rust`
-- Install `Node.js@10+` which fully supported `Node-API`
-- Install `yarn@1.x`
-
-## Test in local
-
-- yarn
-- yarn build
-- yarn test
-
-And you will see:
+## Installation
 
 ```bash
-$ ava --verbose
-
-  ✔ sync function from native code
-  ✔ sleep function from native code (201ms)
-  ─
-
-  2 tests passed
-✨  Done in 1.12s.
+npm install forpc
 ```
 
-## Release package
+## Quick Start
 
-Ensure you have set your **NPM_TOKEN** in the `GitHub` project setting.
+### Client (AsyncDealer)
 
-In `Settings -> Secrets`, add **NPM_TOKEN** into it.
+```javascript
+import { AsyncDealer } from 'forpc'
 
-When you want to release the package:
+async function client() {
+  const dealer = await AsyncDealer.dial('tcp://127.0.0.1:5555')
+  
+  // Send request
+  const requestId = await dealer.send(Buffer.from('Hello from client'))
+  console.log(`Request sent, ID: ${requestId}`)
+  
+  // Receive response
+  const msg = await dealer.recv()
+  console.log('Received:', msg.body().toString())
+}
 
+client()
+```
+
+### Server (AsyncRouter)
+
+```javascript
+import { AsyncRouter } from 'forpc'
+
+async function server() {
+  const router = await AsyncRouter.listen('tcp://127.0.0.1:5555')
+  console.log('Server listening on tcp://127.0.0.1:5555')
+
+  while (true) {
+    // Receive request
+    const req = await router.recv()
+    console.log('Received:', req.body().toString())
+
+    // Create response
+    const res = req.createResponse(Buffer.from('Hello from server'))
+    
+    // Send response
+    await router.send(res)
+  }
+}
+
+server()
+```
+
+## API Documentation
+
+### `AsyncDealer`
+- `static dial(url: string): Promise<AsyncDealer>`: Connects to the specified URL.
+- `send(body: Buffer): Promise<number>`: Sends a message and returns the request ID.
+- `recv(): Promise<DealerMessage>`: Asynchronously receives a message.
+
+### `AsyncRouter`
+- `static listen(url: string): Promise<AsyncRouter>`: Listens on the specified URL.
+- `recv(): Promise<RouterMessage>`: Asynchronously receives a message from a client.
+- `send(msg: RouterMessage): Promise<void>`: Sends a response message back to the client.
+
+### `RouterMessage`
+- `identity(): Buffer | null`: Gets the client identity.
+- `body(): Buffer`: Gets the message body.
+- `createResponse(body: Buffer): RouterMessage`: Creates a response message with the same header (containing routing information) but a new body.
+
+## Local Development
+
+### Requirements
+- [Rust](https://www.rust-lang.org/) (latest stable version)
+- [Node.js](https://nodejs.org/) (v12.22.0+)
+
+### Build and Test
 ```bash
-npm version [<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease [--preid=<prerelease-id>] | from-git]
+# Install dependencies
+npm install
 
-git push
+# Build local binary (Debug)
+npm run build:debug
+
+# Build release version
+npm run build
+
+# Run tests
+npm test
 ```
 
-GitHub actions will do the rest job for you.
+## License
 
-> WARN: Don't run `npm publish` manually.
+[MIT](./LICENSE)

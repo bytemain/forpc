@@ -104,6 +104,5 @@
     "trailingComma": "all",
     "singleQuote": true,
     "arrowParens": "always"
-  },
-  "packageManager": "yarn@4.12.0"
+  }
 }

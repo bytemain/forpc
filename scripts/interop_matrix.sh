@@ -72,7 +72,7 @@ echo "build: go examples"
 (cd "$repo_root/go" && go build -o "$tmp_dir/go_raw_call" ./examples/interop_raw_echo_client)
 
 echo "build: node addon"
-(cd "$repo_root/node" && yarn run build:debug >/dev/null)
+(cd "$repo_root/node" && npm run build:debug >/dev/null)
 
 rust_echo_server="$repo_root/rust/target/debug/examples/interop_echo_server"
 rust_echo_client="$repo_root/rust/target/debug/examples/interop_echo_client"

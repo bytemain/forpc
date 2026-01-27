@@ -62,7 +62,7 @@ go run ./examples/interop_echo_client --connect tcp://127.0.0.1:24000 --msg Hell
 
 ```bash
 cd node
-yarn run build:debug
+npm run build:debug
 node scripts/interop_raw_echo_server.js tcp://127.0.0.1:24002 Raw/Echo
 ```
 

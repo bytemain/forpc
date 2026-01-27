@@ -36,15 +36,15 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: yarn
+          cache: npm
       - name: Install
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
       - name: Install dependencies
-        run: yarn install
+        run: npm install
       - name: Oxlint
-        run: yarn lint
+        run: npm run lint
       - name: Cargo fmt
         run: cargo fmt -- --check
       - name: Clippy

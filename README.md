@@ -1,4 +1,7 @@
 # forpc
+<p align="center">
+  <a href="./README_zh.md">简体中文</a>
+</p>
 
 forpc is a lightweight RPC/Streaming framework based on NNG (nanomsg-next-gen) transport, using Apache Fury for cross-language serialization. Its goal is to enable seamless communication between Rust/Go/Node.js using a unified protocol.
 
@@ -62,7 +65,7 @@ go run ./examples/interop_echo_client --connect tcp://127.0.0.1:24000 --msg Hell
 
 ```bash
 cd node
-yarn run build:debug
+npm run build:debug
 node scripts/interop_raw_echo_server.js tcp://127.0.0.1:24002 Raw/Echo
 ```
 
