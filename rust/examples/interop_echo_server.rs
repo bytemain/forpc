@@ -106,11 +106,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     while let Some(peer) = accept_rx.recv().await {
         println!("interop_echo_server: accepted");
 
-        peer.register_type_by_namespace::<EchoRequest>("forpc.it", "EchoRequest")
-            .await?;
-        peer.register_type_by_namespace::<EchoResponse>("forpc.it", "EchoResponse")
-            .await?;
-
         peer.register_unary("Test/Echo", |req: EchoRequest, _meta, _peer| async move {
             Ok(EchoResponse { result: req.data })
         })

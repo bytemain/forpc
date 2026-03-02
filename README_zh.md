@@ -77,6 +77,5 @@ cargo run --example interop_raw_echo_client -- tcp://127.0.0.1:24002 Raw/Echo He
 
 ## 备注
 
-- 类型注册函数（`register_type`、`RegisterTypeByNamespace` 等）保留为空操作（no-op），以保持向后兼容。Protobuf 类型是自描述的，不需要注册。
 - 当前实现以“可互通/可扩展”为优先，仍在快速迭代中；协议细节以 `docs/TECHNICAL_SPECIFICATION_CN.md` 为准。
 

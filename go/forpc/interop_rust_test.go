@@ -34,9 +34,6 @@ func TestInteropRustGoUnary(t *testing.T) {
 	}
 	defer c.Close()
 
-	_ = RegisterTypeByNamespace[interopEchoRequest](c, "forpc.it", "EchoRequest")
-	_ = RegisterTypeByNamespace[interopEchoResponse](c, "forpc.it", "EchoResponse")
-
 	go func() { _ = c.Serve() }()
 
 	type result struct {

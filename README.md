@@ -80,6 +80,5 @@ cargo run --example interop_raw_echo_client -- tcp://127.0.0.1:24002 Raw/Echo He
 
 ## Notes
 
-- Type registration functions (`register_type`, `RegisterTypeByNamespace`, etc.) are kept as no-ops for backward compatibility. Protobuf types are self-describing and do not need registration.
 - The current implementation prioritizes "interoperability/extensibility" and is still under rapid iteration; refer to `docs/TECHNICAL_SPECIFICATION_CN.md` for protocol details.
 

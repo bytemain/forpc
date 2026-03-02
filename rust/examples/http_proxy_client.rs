@@ -32,8 +32,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let transport = HttpProxyTransport::new(&base_url, &session_id);
 
     let peer = Arc::new(RpcPeer::new(transport, true));
-    peer.register_type::<TestRequest>(4).await?;
-    peer.register_type::<TestResponse>(5).await?;
 
     let peer_clone = peer.clone();
     tokio::spawn(async move {

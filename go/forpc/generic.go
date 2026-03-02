@@ -45,18 +45,6 @@ func RegisterUnary[Req any, Resp any](peer *RpcPeer, method string, h func(*Req,
 	})
 }
 
-// RegisterTypeByNamespaceGeneric is a no-op kept for backward compatibility.
-// Protobuf types are self-describing and do not need registration.
-func RegisterTypeByNamespaceGeneric[T any](peer *RpcPeer, namespace string, name string) error {
-	return nil
-}
-
-// RegisterTypeByNamespace is a no-op kept for backward compatibility.
-// Protobuf types are self-describing and do not need registration.
-func RegisterTypeByNamespace[T any](peer *RpcPeer, namespace string, name string) error {
-	return nil
-}
-
 func CallUnary[Req any, Resp any](peer *RpcPeer, method string, req *Req) (*Resp, error) {
 	pm, ok := any(req).(proto.Message)
 	if !ok {

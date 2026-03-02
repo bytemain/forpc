@@ -23,8 +23,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let listener = RpcListener::bind(&listen_url).await?;
     loop {
         let peer = listener.accept().await?;
-        peer.register_type_by_namespace::<TcpChunk>("forpc.tunnel", "TcpChunk")
-            .await?;
 
         peer.register("Tunnel/Tcp", tunnel_tcp).await;
 

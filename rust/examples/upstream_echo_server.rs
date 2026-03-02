@@ -27,9 +27,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     loop {
         let peer = listener.accept().await?;
 
-        peer.register_type::<TestRequest>(4).await?;
-        peer.register_type::<TestResponse>(5).await?;
-
         peer.register_unary("Test/Echo", |req: TestRequest, _meta, _peer| async move {
             Ok(TestResponse { result: req.data })
         })

@@ -1,7 +1,6 @@
 package forpc
 
 import (
-	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -107,24 +106,6 @@ func NewPeer(t transport.Transport, isInitiator bool) *RpcPeer {
 func (p *RpcPeer) Close() error {
 	p.running.Store(false)
 	return p.transport.Close()
-}
-
-// RegisterStruct is a no-op kept for backward compatibility.
-// Protobuf types are self-describing and do not need registration.
-func (p *RpcPeer) RegisterStruct(v any, typeID uint32) error {
-	return nil
-}
-
-// RegisterNamedStruct is a no-op kept for backward compatibility.
-// Protobuf types are self-describing and do not need registration.
-func (p *RpcPeer) RegisterNamedStruct(type_ any, typeName string) error {
-	return nil
-}
-
-// RegisterTypeByNamespace is a no-op kept for backward compatibility.
-// Protobuf types are self-describing and do not need registration.
-func (p *RpcPeer) RegisterTypeByNamespace(type_ any, namespace string, name string) error {
-	return nil
 }
 
 func (p *RpcPeer) Register(method string, h handlerFunc) {
@@ -417,11 +398,4 @@ func (p *RpcPeer) protoUnmarshalStatus(data []byte) (*Status, error) {
 
 func (p *RpcPeer) userUnmarshal(data []byte, out proto.Message) error {
 	return proto.Unmarshal(data, out)
-}
-
-func (p *RpcPeer) RequireStructRegistered(typeID uint32, v any) error {
-	if typeID == 0 {
-		return errors.New("type id must be non-zero")
-	}
-	return p.RegisterStruct(v, typeID)
 }

@@ -135,22 +135,6 @@ impl RpcPeer {
         }
     }
 
-    pub async fn register_type<T>(&self, _id: u32) -> RpcResult<()>
-    where
-        T: Message + Default + Send + Sync + 'static,
-    {
-        // No-op: protobuf types are self-describing and don't need registration
-        Ok(())
-    }
-
-    pub async fn register_type_by_namespace<T>(&self, _namespace: &str, _type_name: &str) -> RpcResult<()>
-    where
-        T: Message + Default + Send + Sync + 'static,
-    {
-        // No-op: protobuf types are self-describing and don't need registration
-        Ok(())
-    }
-    
     fn alloc_stream_id(&self) -> u32 {
         self.next_stream_id.fetch_add(2, Ordering::Relaxed)
     }

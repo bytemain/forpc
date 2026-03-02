@@ -24,11 +24,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let peer = RpcPeer::connect_with_retry(&url, 50).await?;
 
-    peer.register_type_by_namespace::<EchoRequest>("forpc.it", "EchoRequest")
-        .await?;
-    peer.register_type_by_namespace::<EchoResponse>("forpc.it", "EchoResponse")
-        .await?;
-
     let peer_clone = peer.clone();
     tokio::spawn(async move {
         let _ = peer_clone.serve().await;

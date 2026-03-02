@@ -25,8 +25,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .unwrap_or_else(|| "ipc:///tmp/forpc_proxy.ipc".to_string());
 
     let peer = RpcPeer::connect_with_retry(&proxy_url, 10).await?;
-    peer.register_type::<TestRequest>(4).await?;
-    peer.register_type::<TestResponse>(5).await?;
 
     let peer = Arc::new(peer);
     let peer_task = peer.clone();
