@@ -163,7 +163,7 @@ jobs:
       - name: Install dependencies
         run: npm install
       - name: Download artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: bindings-${{ matrix.settings.target }}
           path: node/transport
@@ -216,7 +216,7 @@ jobs:
       - name: Install dependencies
         run: npm install
       - name: Download artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: bindings-${{ matrix.target }}
           path: node/transport
@@ -259,7 +259,7 @@ jobs:
       - name: create npm dirs
         run: npx napi create-npm-dirs
       - name: Download all artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: node/artifacts
       - name: Move artifacts
