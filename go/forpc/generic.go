@@ -26,7 +26,7 @@ func RegisterUnary[Req any, Resp any](peer *RpcPeer, method string, h func(*Req,
 		if !ok {
 			return ResponseError(StatusInvalidArgument, "request type does not implement proto.Message")
 		}
-		if err := p.userUnmarshal(payload, pm); err != nil {
+		if err := proto.Unmarshal(payload, pm); err != nil {
 			return ResponseError(StatusInvalidArgument, err.Error())
 		}
 		resp, rpcErr := h(&req, r.Metadata, p)
@@ -37,7 +37,7 @@ func RegisterUnary[Req any, Resp any](peer *RpcPeer, method string, h func(*Req,
 		if !ok {
 			return ResponseError(StatusInternal, "response type does not implement proto.Message")
 		}
-		out, err := p.userMarshal(rpm)
+		out, err := proto.Marshal(rpm)
 		if err != nil {
 			return ResponseError(StatusInternal, err.Error())
 		}

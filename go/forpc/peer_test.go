@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/bytemain/forpc/go/forpc/pb"
 )
 
@@ -79,10 +81,10 @@ func TestBidiStreamInproc(t *testing.T) {
 					continue
 				}
 				var msg pb.ChatMessage
-				if err := peer.userUnmarshal(pkt.Payload, &msg); err != nil {
+				if err := proto.Unmarshal(pkt.Payload, &msg); err != nil {
 					return ResponseError(StatusInvalidArgument, err.Error())
 				}
-				out, err := peer.userMarshal(&pb.ChatMessage{Text: "Echo: " + msg.Text})
+				out, err := proto.Marshal(&pb.ChatMessage{Text: "Echo: " + msg.Text})
 				if err != nil {
 					return ResponseError(StatusInternal, err.Error())
 				}
@@ -126,7 +128,7 @@ func TestBidiStreamInproc(t *testing.T) {
 			switch pkt.Kind {
 			case FrameData:
 				var msg pb.ChatMessage
-				if err := stream.peer.userUnmarshal(pkt.Payload, &msg); err != nil {
+				if err := proto.Unmarshal(pkt.Payload, &msg); err != nil {
 					t.Fatalf("unmarshal: %v", err)
 				}
 				if msg.Text == "" {

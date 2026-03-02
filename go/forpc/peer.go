@@ -119,7 +119,7 @@ func (p *RpcPeer) Call(method string, req proto.Message, resp proto.Message) err
 }
 
 func (p *RpcPeer) CallWithMetadata(method string, req proto.Message, meta map[string]string, resp proto.Message) error {
-	dataPayload, err := p.userMarshal(req)
+	dataPayload, err := proto.Marshal(req)
 	if err != nil {
 		return err
 	}
@@ -127,7 +127,7 @@ func (p *RpcPeer) CallWithMetadata(method string, req proto.Message, meta map[st
 	if err != nil {
 		return err
 	}
-	return p.userUnmarshal(resBytes, resp)
+	return proto.Unmarshal(resBytes, resp)
 }
 
 func (p *RpcPeer) CallRaw(method string, payload []byte) ([]byte, error) {
@@ -153,7 +153,7 @@ func (p *RpcPeer) unaryRawWithMetadata(method string, meta map[string]string, pa
 	p.pendingMu.Unlock()
 
 	call := &pb.Call{Method: method, Metadata: meta}
-	hdrPayload, err := p.protoMarshal(call)
+	hdrPayload, err := proto.Marshal(call)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,7 @@ func (p *RpcPeer) unaryRawWithMetadata(method string, meta map[string]string, pa
 	}
 
 	eos := &pb.Status{Code: StatusOK, Message: "OK"}
-	trPayload, err := p.protoMarshal(eos)
+	trPayload, err := proto.Marshal(eos)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +197,7 @@ func (p *RpcPeer) streamInternal(method string, meta map[string]string) (uint32,
 	p.pendingMu.Unlock()
 
 	call := &pb.Call{Method: method, Metadata: meta}
-	hdrPayload, err := p.protoMarshal(call)
+	hdrPayload, err := proto.Marshal(call)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -343,7 +343,7 @@ func (p *RpcPeer) sendResponse(streamID uint32, resp Response) error {
 		}
 	}
 	st := &pb.Status{Code: resp.Status.Code, Message: resp.Status.Message}
-	tr, err := p.protoMarshal(st)
+	tr, err := proto.Marshal(st)
 	if err != nil {
 		return err
 	}
@@ -368,14 +368,6 @@ func (p *RpcPeer) removePending(streamID uint32) {
 	p.pendingMu.Unlock()
 }
 
-func (p *RpcPeer) protoMarshal(v proto.Message) ([]byte, error) {
-	return proto.Marshal(v)
-}
-
-func (p *RpcPeer) userMarshal(v proto.Message) ([]byte, error) {
-	return proto.Marshal(v)
-}
-
 func (p *RpcPeer) protoUnmarshalCall(data []byte) (*Call, error) {
 	var c pb.Call
 	if err := proto.Unmarshal(data, &c); err != nil {
@@ -396,6 +388,4 @@ func (p *RpcPeer) protoUnmarshalStatus(data []byte) (*Status, error) {
 	return &Status{Code: st.Code, Message: st.Message}, nil
 }
 
-func (p *RpcPeer) userUnmarshal(data []byte, out proto.Message) error {
-	return proto.Unmarshal(data, out)
-}
+

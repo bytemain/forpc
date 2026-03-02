@@ -22,7 +22,7 @@ func (s *BidiStream[Req, Resp]) Send(msg *Req) error {
 	if !ok {
 		return errors.New("message does not implement proto.Message")
 	}
-	payload, err := s.peer.userMarshal(pm)
+	payload, err := proto.Marshal(pm)
 	if err != nil {
 		return err
 	}
@@ -41,7 +41,7 @@ func (s *BidiStream[Req, Resp]) Recv() (*Resp, error) {
 		if !ok {
 			return nil, errors.New("message does not implement proto.Message")
 		}
-		if err := s.peer.userUnmarshal(pkt.Payload, pm); err != nil {
+		if err := proto.Unmarshal(pkt.Payload, pm); err != nil {
 			return nil, err
 		}
 		return &out, nil
@@ -68,7 +68,7 @@ func (s *BidiStream[Req, Resp]) CloseSend() error {
 	s.closed = true
 	s.mu.Unlock()
 	st := &pb.Status{Code: StatusOK, Message: "OK"}
-	payload, err := s.peer.protoMarshal(st)
+	payload, err := proto.Marshal(st)
 	if err != nil {
 		return err
 	}
