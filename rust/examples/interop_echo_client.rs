@@ -1,15 +1,16 @@
 use std::env;
 
-use fory::ForyObject;
 use forpc::RpcPeer;
 
-#[derive(ForyObject, Debug, Clone)]
+#[derive(prost::Message, Clone)]
 struct EchoRequest {
+    #[prost(string, tag = "1")]
     data: String,
 }
 
-#[derive(ForyObject, Debug, Clone)]
+#[derive(prost::Message, Clone)]
 struct EchoResponse {
+    #[prost(string, tag = "1")]
     result: String,
 }
 
@@ -22,11 +23,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let msg = args.next().unwrap_or_else(|| "Hello".to_string());
 
     let peer = RpcPeer::connect_with_retry(&url, 50).await?;
-
-    peer.register_type_by_namespace::<EchoRequest>("forpc.it", "EchoRequest")
-        .await?;
-    peer.register_type_by_namespace::<EchoResponse>("forpc.it", "EchoResponse")
-        .await?;
 
     let peer_clone = peer.clone();
     tokio::spawn(async move {

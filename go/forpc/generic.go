@@ -1,5 +1,11 @@
 package forpc
 
+import (
+	"errors"
+
+	"google.golang.org/protobuf/proto"
+)
+
 func RegisterUnary[Req any, Resp any](peer *RpcPeer, method string, h func(*Req, map[string]string, *RpcPeer) (*Resp, *RpcError)) {
 	peer.Register(method, func(r Request, p *RpcPeer) Response {
 		var payload []byte
@@ -16,14 +22,22 @@ func RegisterUnary[Req any, Resp any](peer *RpcPeer, method string, h func(*Req,
 			return ResponseError(StatusInvalidArgument, "missing payload")
 		}
 		var req Req
-		if err := p.userUnmarshal(payload, &req); err != nil {
+		pm, ok := any(&req).(proto.Message)
+		if !ok {
+			return ResponseError(StatusInvalidArgument, "request type does not implement proto.Message")
+		}
+		if err := proto.Unmarshal(payload, pm); err != nil {
 			return ResponseError(StatusInvalidArgument, err.Error())
 		}
 		resp, rpcErr := h(&req, r.Metadata, p)
 		if rpcErr != nil {
 			return Response{Metadata: map[string]string{}, Payload: nil, Status: Status{Code: rpcErr.Code, Message: rpcErr.Message}}
 		}
-		out, err := p.userMarshal(resp)
+		rpm, ok := any(resp).(proto.Message)
+		if !ok {
+			return ResponseError(StatusInternal, "response type does not implement proto.Message")
+		}
+		out, err := proto.Marshal(rpm)
 		if err != nil {
 			return ResponseError(StatusInternal, err.Error())
 		}
@@ -31,22 +45,33 @@ func RegisterUnary[Req any, Resp any](peer *RpcPeer, method string, h func(*Req,
 	})
 }
 
-func RegisterTypeByNamespace[T any](peer *RpcPeer, namespace string, name string) error {
-	var zero T
-	return peer.RegisterTypeByNamespace(zero, namespace, name)
-}
-
 func CallUnary[Req any, Resp any](peer *RpcPeer, method string, req *Req) (*Resp, error) {
+	pm, ok := any(req).(proto.Message)
+	if !ok {
+		return nil, errors.New("request type does not implement proto.Message")
+	}
 	var resp Resp
-	if err := peer.Call(method, req, &resp); err != nil {
+	rpm, ok := any(&resp).(proto.Message)
+	if !ok {
+		return nil, errors.New("response type does not implement proto.Message")
+	}
+	if err := peer.CallWithMetadata(method, pm, map[string]string{}, rpm); err != nil {
 		return nil, err
 	}
 	return &resp, nil
 }
 
 func CallUnaryWithMetadata[Req any, Resp any](peer *RpcPeer, method string, req *Req, meta map[string]string) (*Resp, error) {
+	pm, ok := any(req).(proto.Message)
+	if !ok {
+		return nil, errors.New("request type does not implement proto.Message")
+	}
 	var resp Resp
-	if err := peer.CallWithMetadata(method, req, meta, &resp); err != nil {
+	rpm, ok := any(&resp).(proto.Message)
+	if !ok {
+		return nil, errors.New("response type does not implement proto.Message")
+	}
+	if err := peer.CallWithMetadata(method, pm, meta, rpm); err != nil {
 		return nil, err
 	}
 	return &resp, nil

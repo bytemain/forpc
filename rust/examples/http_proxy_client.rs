@@ -1,20 +1,21 @@
 use std::env;
 use std::sync::Arc;
 
-use fory::ForyObject;
 use forpc::RpcPeer;
 
 #[path = "http_proxy/common.rs"]
 mod http_proxy_common;
 use http_proxy_common::HttpProxyTransport;
 
-#[derive(ForyObject, Debug, Clone, PartialEq)]
+#[derive(prost::Message, Clone, PartialEq)]
 struct TestRequest {
+    #[prost(string, tag = "1")]
     data: String,
 }
 
-#[derive(ForyObject, Debug, Clone, PartialEq)]
+#[derive(prost::Message, Clone, PartialEq)]
 struct TestResponse {
+    #[prost(string, tag = "1")]
     result: String,
 }
 
@@ -31,8 +32,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let transport = HttpProxyTransport::new(&base_url, &session_id);
 
     let peer = Arc::new(RpcPeer::new(transport, true));
-    peer.register_type::<TestRequest>(4).await?;
-    peer.register_type::<TestResponse>(5).await?;
 
     let peer_clone = peer.clone();
     tokio::spawn(async move {

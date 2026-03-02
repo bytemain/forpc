@@ -1,13 +1,13 @@
 package forpc
 
 import (
-	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/apache/fory/go/fory"
+	"google.golang.org/protobuf/proto"
 
+	"github.com/bytemain/forpc/go/forpc/pb"
 	"github.com/bytemain/forpc/go/transport"
 	mangostransport "github.com/bytemain/forpc/go/transport/mangos"
 )
@@ -67,11 +67,6 @@ type RpcPeer struct {
 	nextStreamID atomic.Uint32
 	isInitiator  bool
 
-	protoMu   sync.Mutex
-	protoFory *fory.Fory
-	userMu    sync.Mutex
-	userFory  *fory.Fory
-
 	running atomic.Bool
 }
 
@@ -92,20 +87,12 @@ func ConnectWithRetry(url string, maxRetries uint32) (*RpcPeer, error) {
 }
 
 func NewPeer(t transport.Transport, isInitiator bool) *RpcPeer {
-	protoF := fory.New(fory.WithCompatible(true), fory.WithXlang(true))
-	_ = protoF.RegisterStruct(Call{}, 2)
-	_ = protoF.RegisterStruct(Status{}, 3)
-
-	userF := fory.New(fory.WithCompatible(true), fory.WithXlang(true))
-
 	p := &RpcPeer{
 		transport:   t,
 		handlers:    make(map[string]handlerFunc),
 		pending:     make(map[uint32]*pendingCall),
 		inbound:     make(map[uint32]*inboundState),
 		isInitiator: isInitiator,
-		protoFory:   protoF,
-		userFory:    userF,
 	}
 	if isInitiator {
 		p.nextStreamID.Store(1)
@@ -121,37 +108,18 @@ func (p *RpcPeer) Close() error {
 	return p.transport.Close()
 }
 
-func (p *RpcPeer) RegisterStruct(v any, typeID uint32) error {
-	p.userMu.Lock()
-	defer p.userMu.Unlock()
-	return p.userFory.RegisterStruct(v, typeID)
-}
-
-func (p *RpcPeer) RegisterNamedStruct(type_ any, typeName string) error {
-	p.userMu.Lock()
-	defer p.userMu.Unlock()
-	return p.userFory.RegisterNamedStruct(type_, typeName)
-}
-
-func (p *RpcPeer) RegisterTypeByNamespace(type_ any, namespace string, name string) error {
-	if namespace == "" {
-		return p.RegisterNamedStruct(type_, name)
-	}
-	return p.RegisterNamedStruct(type_, namespace+"."+name)
-}
-
 func (p *RpcPeer) Register(method string, h handlerFunc) {
 	p.handlersMu.Lock()
 	p.handlers[method] = h
 	p.handlersMu.Unlock()
 }
 
-func (p *RpcPeer) Call(method string, req any, resp any) error {
+func (p *RpcPeer) Call(method string, req proto.Message, resp proto.Message) error {
 	return p.CallWithMetadata(method, req, map[string]string{}, resp)
 }
 
-func (p *RpcPeer) CallWithMetadata(method string, req any, meta map[string]string, resp any) error {
-	dataPayload, err := p.userMarshal(req)
+func (p *RpcPeer) CallWithMetadata(method string, req proto.Message, meta map[string]string, resp proto.Message) error {
+	dataPayload, err := proto.Marshal(req)
 	if err != nil {
 		return err
 	}
@@ -159,7 +127,7 @@ func (p *RpcPeer) CallWithMetadata(method string, req any, meta map[string]strin
 	if err != nil {
 		return err
 	}
-	return p.userUnmarshal(resBytes, resp)
+	return proto.Unmarshal(resBytes, resp)
 }
 
 func (p *RpcPeer) CallRaw(method string, payload []byte) ([]byte, error) {
@@ -184,8 +152,8 @@ func (p *RpcPeer) unaryRawWithMetadata(method string, meta map[string]string, pa
 	p.pending[streamID] = pc
 	p.pendingMu.Unlock()
 
-	call := Call{Method: method, Metadata: meta}
-	hdrPayload, err := p.protoMarshal(&call)
+	call := &pb.Call{Method: method, Metadata: meta}
+	hdrPayload, err := proto.Marshal(call)
 	if err != nil {
 		return nil, err
 	}
@@ -196,8 +164,8 @@ func (p *RpcPeer) unaryRawWithMetadata(method string, meta map[string]string, pa
 		return nil, err
 	}
 
-	eos := StatusOKValue()
-	trPayload, err := p.protoMarshal(&eos)
+	eos := &pb.Status{Code: StatusOK, Message: "OK"}
+	trPayload, err := proto.Marshal(eos)
 	if err != nil {
 		return nil, err
 	}
@@ -228,8 +196,8 @@ func (p *RpcPeer) streamInternal(method string, meta map[string]string) (uint32,
 	p.pending[streamID] = pc
 	p.pendingMu.Unlock()
 
-	call := Call{Method: method, Metadata: meta}
-	hdrPayload, err := p.protoMarshal(&call)
+	call := &pb.Call{Method: method, Metadata: meta}
+	hdrPayload, err := proto.Marshal(call)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -374,7 +342,8 @@ func (p *RpcPeer) sendResponse(streamID uint32, resp Response) error {
 			return err
 		}
 	}
-	tr, err := p.protoMarshal(&resp.Status)
+	st := &pb.Status{Code: resp.Status.Code, Message: resp.Status.Message}
+	tr, err := proto.Marshal(st)
 	if err != nil {
 		return err
 	}
@@ -399,52 +368,24 @@ func (p *RpcPeer) removePending(streamID uint32) {
 	p.pendingMu.Unlock()
 }
 
-func (p *RpcPeer) protoMarshal(v any) ([]byte, error) {
-	p.protoMu.Lock()
-	defer p.protoMu.Unlock()
-	return p.protoFory.Marshal(v)
-}
-
-func (p *RpcPeer) userMarshal(v any) ([]byte, error) {
-	p.userMu.Lock()
-	defer p.userMu.Unlock()
-	return p.userFory.Marshal(v)
-}
-
 func (p *RpcPeer) protoUnmarshalCall(data []byte) (*Call, error) {
-	var c Call
-	p.protoMu.Lock()
-	err := p.protoFory.Unmarshal(data, &c)
-	p.protoMu.Unlock()
-	if err != nil {
+	var c pb.Call
+	if err := proto.Unmarshal(data, &c); err != nil {
 		return nil, err
 	}
-	if c.Metadata == nil {
-		c.Metadata = map[string]string{}
+	metadata := c.Metadata
+	if metadata == nil {
+		metadata = map[string]string{}
 	}
-	return &c, nil
+	return &Call{Method: c.Method, Metadata: metadata}, nil
 }
 
 func (p *RpcPeer) protoUnmarshalStatus(data []byte) (*Status, error) {
-	var st Status
-	p.protoMu.Lock()
-	err := p.protoFory.Unmarshal(data, &st)
-	p.protoMu.Unlock()
-	if err != nil {
+	var st pb.Status
+	if err := proto.Unmarshal(data, &st); err != nil {
 		return nil, err
 	}
-	return &st, nil
+	return &Status{Code: st.Code, Message: st.Message}, nil
 }
 
-func (p *RpcPeer) userUnmarshal(data []byte, out any) error {
-	p.userMu.Lock()
-	defer p.userMu.Unlock()
-	return p.userFory.Unmarshal(data, out)
-}
 
-func (p *RpcPeer) RequireStructRegistered(typeID uint32, v any) error {
-	if typeID == 0 {
-		return errors.New("type id must be non-zero")
-	}
-	return p.RegisterStruct(v, typeID)
-}

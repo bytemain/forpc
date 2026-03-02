@@ -15,15 +15,16 @@ mod tests {
     use super::*;
     use std::time::Duration;
     use tokio::time::sleep;
-    use fory::ForyObject;
 
-    #[derive(ForyObject, Debug, Clone, PartialEq)]
+    #[derive(prost::Message, Clone, PartialEq)]
     struct TestRequest {
+        #[prost(string, tag = "1")]
         data: String,
     }
 
-    #[derive(ForyObject, Debug, Clone, PartialEq)]
+    #[derive(prost::Message, Clone, PartialEq)]
     struct TestResponse {
+        #[prost(string, tag = "1")]
         result: String,
     }
 
@@ -38,9 +39,6 @@ mod tests {
             let listener = RpcListener::bind(&url_server).await.unwrap();
             let peer = listener.accept().await.unwrap();
             
-            peer.register_type::<TestRequest>(4).await.unwrap();
-            peer.register_type::<TestResponse>(5).await.unwrap();
-            
             // Register unary handler
             peer.register_unary("Test/Echo", |req: TestRequest, _meta, _peer| async move {
                 Ok(TestResponse { result: req.data })
@@ -54,10 +52,6 @@ mod tests {
         
         // Client
         let peer = RpcPeer::connect(&url).await?;
-        
-        // Register types
-        peer.register_type::<TestRequest>(4).await.unwrap();
-        peer.register_type::<TestResponse>(5).await.unwrap();
         
         let peer_clone = peer.clone();
         tokio::spawn(async move {

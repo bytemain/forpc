@@ -1,17 +1,19 @@
 # forpc
 
-forpc 是一个基于 NNG（nanomsg-next-gen）传输、使用 Apache Fory 做跨语言序列化的轻量 RPC/Streaming 框架，目标是让 Rust/Go/Node.js 之间可以用同一套协议互通。
+forpc 是一个基于 NNG（nanomsg-next-gen）传输、使用 Protocol Buffers（protobuf）做跨语言序列化的轻量 RPC/Streaming 框架，目标是让 Rust/Go/Node.js 之间可以用同一套协议互通。
 
 ## 特性
 
 - 传输：NNG
   - Rust：`anng`（nng-rs）
   - Go：`mangos`（nanomsg over Go）
-- 序列化：Apache Fory（默认开启 `compatible + xlang`）
+- 序列化：Protocol Buffers（protobuf）
+  - Rust：`prost` crate（使用 derive 宏）
+  - Go：`google.golang.org/protobuf`
 - 调用模型
   - Unary（一次请求/一次响应）
   - Bidi streaming（按 stream_id 复用连接的 DATA/TRAILERS 帧流）
-  - Raw 调用（不做 Fory user payload 编解码，直接传 bytes）
+  - Raw 调用（不做 protobuf user payload 编解码，直接传 bytes）
 - 跨语言互通：Rust ↔ Go ↔ Node.js（Node 通过 napi-rs 绑定 Rust 实现）
 
 ## 目录结构
@@ -75,6 +77,5 @@ cargo run --example interop_raw_echo_client -- tcp://127.0.0.1:24002 Raw/Echo He
 
 ## 备注
 
-- 类型注册建议使用 `register_type_by_namespace(namespace, name)`，避免跨 crate/跨语言的 type id 冲突。
 - 当前实现以“可互通/可扩展”为优先，仍在快速迭代中；协议细节以 `docs/TECHNICAL_SPECIFICATION_CN.md` 为准。
 

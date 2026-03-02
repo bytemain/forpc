@@ -3,7 +3,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use bytes::Bytes;
-use fory::ForyObject;
 use forpc::RpcPeer;
 use forpc::transport::nng::{AsyncRouter, InboundFrame, ServerTransport};
 use tokio::sync::{mpsc, Mutex};
@@ -21,13 +20,15 @@ fn hex_prefix(data: &[u8], limit: usize) -> String {
     s
 }
 
-#[derive(ForyObject, Debug, Clone)]
+#[derive(prost::Message, Clone)]
 struct EchoRequest {
+    #[prost(string, tag = "1")]
     data: String,
 }
 
-#[derive(ForyObject, Debug, Clone)]
+#[derive(prost::Message, Clone)]
 struct EchoResponse {
+    #[prost(string, tag = "1")]
     result: String,
 }
 
@@ -104,11 +105,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     while let Some(peer) = accept_rx.recv().await {
         println!("interop_echo_server: accepted");
-
-        peer.register_type_by_namespace::<EchoRequest>("forpc.it", "EchoRequest")
-            .await?;
-        peer.register_type_by_namespace::<EchoResponse>("forpc.it", "EchoResponse")
-            .await?;
 
         peer.register_unary("Test/Echo", |req: EchoRequest, _meta, _peer| async move {
             Ok(EchoResponse { result: req.data })

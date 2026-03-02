@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
 
-use fory::ForyObject;
 use forpc::{Request, Response, RpcListener, RpcPeer, Status, StatusCode};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-#[derive(ForyObject, Debug, Clone)]
+#[derive(prost::Message, Clone)]
 struct TcpChunk {
+    #[prost(bytes = "vec", tag = "1")]
     data: Vec<u8>,
 }
 
@@ -23,8 +23,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let listener = RpcListener::bind(&listen_url).await?;
     loop {
         let peer = listener.accept().await?;
-        peer.register_type_by_namespace::<TcpChunk>("forpc.tunnel", "TcpChunk")
-            .await?;
 
         peer.register("Tunnel/Tcp", tunnel_tcp).await;
 

@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package forpc;
+
+option go_package = "github.com/bytemain/forpc/go/forpc/pb";
+
+message Call {
+  string method = 1;
+  map<string, string> metadata = 2;
+}
+
+message Status {
+  uint32 code = 1;
+  string message = 2;
+}

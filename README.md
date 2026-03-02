@@ -3,18 +3,20 @@
   <a href="./README_zh.md">简体中文</a>
 </p>
 
-forpc is a lightweight RPC/Streaming framework based on NNG (nanomsg-next-gen) transport, using Apache Fury for cross-language serialization. Its goal is to enable seamless communication between Rust/Go/Node.js using a unified protocol.
+forpc is a lightweight RPC/Streaming framework based on NNG (nanomsg-next-gen) transport, using Protocol Buffers (protobuf) for cross-language serialization. Its goal is to enable seamless communication between Rust/Go/Node.js using a unified protocol.
 
 ## Features
 
 - Transport: NNG
   - Rust: `anng` (nng-rs)
   - Go: `mangos` (nanomsg over Go)
-- Serialization: Apache Fury (with `compatible + xlang` enabled by default)
+- Serialization: Protocol Buffers (protobuf)
+  - Rust: `prost` crate with derive macros
+  - Go: `google.golang.org/protobuf`
 - Call Models
   - Unary (single request/single response)
   - Bidi streaming (DATA/TRAILERS frame streaming multiplexed by stream_id)
-  - Raw calls (no Fury user payload encoding/decoding, direct bytes transmission)
+  - Raw calls (no protobuf user payload encoding/decoding, direct bytes transmission)
 - Cross-language interoperability: Rust ↔ Go ↔ Node.js (Node.js uses napi-rs bindings to Rust implementation)
 
 ## Directory Structure
@@ -78,6 +80,5 @@ cargo run --example interop_raw_echo_client -- tcp://127.0.0.1:24002 Raw/Echo He
 
 ## Notes
 
-- Type registration is recommended using `register_type_by_namespace(namespace, name)` to avoid type id conflicts across crates/languages.
 - The current implementation prioritizes "interoperability/extensibility" and is still under rapid iteration; refer to `docs/TECHNICAL_SPECIFICATION_CN.md` for protocol details.
 

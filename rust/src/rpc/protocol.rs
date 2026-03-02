@@ -1,4 +1,4 @@
-use fory::{ForyObject, Error, Fory};
+use prost::Message;
 use std::collections::HashMap;
 use bytes::{Bytes, BytesMut, Buf, BufMut};
 use super::status::StatusCode;
@@ -33,12 +33,12 @@ pub struct Packet {
 }
 
 impl Packet {
-    pub fn headers(stream_id: u32, call: &Call, fory: &mut Fory) -> Result<Self, Error> {
-        Ok(Self {
+    pub fn headers(stream_id: u32, call: &Call) -> Self {
+        Self {
             stream_id,
             kind: frame_kind::HEADERS,
-            payload: Bytes::from(fory.serialize(call)?),
-        })
+            payload: Bytes::from(call.encode_to_vec()),
+        }
     }
     
     pub fn data(stream_id: u32, payload: Bytes) -> Self {
@@ -49,15 +49,15 @@ impl Packet {
         }
     }
     
-    pub fn trailers(stream_id: u32, status: &Status, fory: &mut Fory) -> Result<Self, Error> {
-        Ok(Self {
+    pub fn trailers(stream_id: u32, status: &Status) -> Self {
+        Self {
             stream_id,
             kind: frame_kind::TRAILERS,
-            payload: Bytes::from(fory.serialize(status)?),
-        })
+            payload: Bytes::from(status.encode_to_vec()),
+        }
     }
     
-    pub fn encode(self) -> Result<Bytes, Error> {
+    pub fn encode(self) -> Result<Bytes, PacketDecodeError> {
         // Manual framing: u32 (BE) + u8
         let mut buf = BytesMut::with_capacity(5 + self.payload.len());
         buf.put_u32(self.stream_id);
@@ -105,9 +105,11 @@ mod tests {
     }
 }
 
-#[derive(ForyObject, Debug, Clone)]
+#[derive(Message, Clone)]
 pub struct Call {
+    #[prost(string, tag = "1")]
     pub method: String,
+    #[prost(map = "string, string", tag = "2")]
     pub metadata: HashMap<String, String>,
 }
 
@@ -129,9 +131,11 @@ impl Call {
     }
 }
 
-#[derive(ForyObject, Debug, Clone)]
+#[derive(Message, Clone)]
 pub struct Status {
+    #[prost(uint32, tag = "1")]
     pub code: u32,
+    #[prost(string, tag = "2")]
     pub message: String,
 }
 
