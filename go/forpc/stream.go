@@ -3,6 +3,10 @@ package forpc
 import (
 	"errors"
 	"sync"
+
+	"google.golang.org/protobuf/proto"
+
+	"github.com/bytemain/forpc/go/forpc/pb"
 )
 
 type BidiStream[Req any, Resp any] struct {
@@ -14,7 +18,11 @@ type BidiStream[Req any, Resp any] struct {
 }
 
 func (s *BidiStream[Req, Resp]) Send(msg *Req) error {
-	payload, err := s.peer.userMarshal(msg)
+	pm, ok := any(msg).(proto.Message)
+	if !ok {
+		return errors.New("message does not implement proto.Message")
+	}
+	payload, err := s.peer.userMarshal(pm)
 	if err != nil {
 		return err
 	}
@@ -29,7 +37,11 @@ func (s *BidiStream[Req, Resp]) Recv() (*Resp, error) {
 	switch pkt.Kind {
 	case FrameData:
 		var out Resp
-		if err := s.peer.userUnmarshal(pkt.Payload, &out); err != nil {
+		pm, ok := any(&out).(proto.Message)
+		if !ok {
+			return nil, errors.New("message does not implement proto.Message")
+		}
+		if err := s.peer.userUnmarshal(pkt.Payload, pm); err != nil {
 			return nil, err
 		}
 		return &out, nil
@@ -55,8 +67,8 @@ func (s *BidiStream[Req, Resp]) CloseSend() error {
 	}
 	s.closed = true
 	s.mu.Unlock()
-	st := StatusOKValue()
-	payload, err := s.peer.protoMarshal(&st)
+	st := &pb.Status{Code: StatusOK, Message: "OK"}
+	payload, err := s.peer.protoMarshal(st)
 	if err != nil {
 		return err
 	}

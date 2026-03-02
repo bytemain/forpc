@@ -3,15 +3,9 @@ package forpc
 import (
 	"testing"
 	"time"
+
+	"github.com/bytemain/forpc/go/forpc/pb"
 )
-
-type testRequest struct {
-	Data string
-}
-
-type testResponse struct {
-	Result string
-}
 
 func TestUnaryCallInproc(t *testing.T) {
 	url := "inproc://forpc_go_unary"
@@ -27,11 +21,9 @@ func TestUnaryCallInproc(t *testing.T) {
 		if err != nil {
 			return
 		}
-		_ = RegisterTypeByNamespace[testRequest](p, "forpc.test", "TestRequest")
-		_ = RegisterTypeByNamespace[testResponse](p, "forpc.test", "TestResponse")
 
-		RegisterUnary[testRequest, testResponse](p, "Test/Echo", func(req *testRequest, _ map[string]string, _ *RpcPeer) (*testResponse, *RpcError) {
-			return &testResponse{Result: req.Data}, nil
+		RegisterUnary[pb.TestRequest, pb.TestResponse](p, "Test/Echo", func(req *pb.TestRequest, _ map[string]string, _ *RpcPeer) (*pb.TestResponse, *RpcError) {
+			return &pb.TestResponse{Result: req.Data}, nil
 		})
 
 		_ = p.Serve()
@@ -43,18 +35,15 @@ func TestUnaryCallInproc(t *testing.T) {
 	}
 	defer c.Close()
 
-	_ = RegisterTypeByNamespace[testRequest](c, "forpc.test", "TestRequest")
-	_ = RegisterTypeByNamespace[testResponse](c, "forpc.test", "TestResponse")
-
 	go func() { _ = c.Serve() }()
 
 	type result struct {
-		resp *testResponse
+		resp *pb.TestResponse
 		err  error
 	}
 	ch := make(chan result, 1)
 	go func() {
-		resp, err := CallUnary[testRequest, testResponse](c, "Test/Echo", &testRequest{Data: "Hello"})
+		resp, err := CallUnary[pb.TestRequest, pb.TestResponse](c, "Test/Echo", &pb.TestRequest{Data: "Hello"})
 		ch <- result{resp: resp, err: err}
 	}()
 	select {
@@ -68,10 +57,6 @@ func TestUnaryCallInproc(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatalf("call timeout")
 	}
-}
-
-type chatMessage struct {
-	Text string
 }
 
 func TestBidiStreamInproc(t *testing.T) {
@@ -88,17 +73,16 @@ func TestBidiStreamInproc(t *testing.T) {
 		if err != nil {
 			return
 		}
-		_ = RegisterTypeByNamespace[chatMessage](p, "forpc.test", "ChatMessage")
 		p.Register("Chat/Connect", func(r Request, peer *RpcPeer) Response {
 			for pkt := range r.Stream {
 				if pkt.Kind != FrameData {
 					continue
 				}
-				var msg chatMessage
+				var msg pb.ChatMessage
 				if err := peer.userUnmarshal(pkt.Payload, &msg); err != nil {
 					return ResponseError(StatusInvalidArgument, err.Error())
 				}
-				out, err := peer.userMarshal(&chatMessage{Text: "Echo: " + msg.Text})
+				out, err := peer.userMarshal(&pb.ChatMessage{Text: "Echo: " + msg.Text})
 				if err != nil {
 					return ResponseError(StatusInternal, err.Error())
 				}
@@ -114,17 +98,16 @@ func TestBidiStreamInproc(t *testing.T) {
 		t.Fatalf("connect: %v", err)
 	}
 	defer c.Close()
-	_ = RegisterTypeByNamespace[chatMessage](c, "forpc.test", "ChatMessage")
 
 	go func() { _ = c.Serve() }()
 
-	stream, err := Stream[chatMessage, chatMessage](c, "Chat/Connect")
+	stream, err := Stream[pb.ChatMessage, pb.ChatMessage](c, "Chat/Connect")
 	if err != nil {
 		t.Fatalf("stream: %v", err)
 	}
 
 	for i := 0; i < 3; i++ {
-		if err := stream.Send(&chatMessage{Text: "Msg"}); err != nil {
+		if err := stream.Send(&pb.ChatMessage{Text: "Msg"}); err != nil {
 			t.Fatalf("send: %v", err)
 		}
 	}
@@ -142,7 +125,7 @@ func TestBidiStreamInproc(t *testing.T) {
 			}
 			switch pkt.Kind {
 			case FrameData:
-				var msg chatMessage
+				var msg pb.ChatMessage
 				if err := stream.peer.userUnmarshal(pkt.Payload, &msg); err != nil {
 					t.Fatalf("unmarshal: %v", err)
 				}

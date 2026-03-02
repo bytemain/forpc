@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package forpc.test;
+
+option go_package = "github.com/bytemain/forpc/go/forpc/pb";
+
+message TestRequest {
+  string data = 1;
+}
+
+message TestResponse {
+  string result = 1;
+}
+
+message ChatMessage {
+  string text = 1;
+}
+
+message EchoRequest {
+  string data = 1;
+}
+
+message EchoResponse {
+  string result = 1;
+}

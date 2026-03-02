@@ -6,15 +6,8 @@ import (
 	"log"
 
 	"github.com/bytemain/forpc/go/forpc"
+	"github.com/bytemain/forpc/go/forpc/pb"
 )
-
-type EchoRequest struct {
-	Data string
-}
-
-type EchoResponse struct {
-	Result string
-}
 
 func main() {
 	url := flag.String("connect", "tcp://127.0.0.1:24000", "server url")
@@ -27,16 +20,9 @@ func main() {
 	}
 	defer p.Close()
 
-	if err := forpc.RegisterTypeByNamespace[EchoRequest](p, "forpc.it", "EchoRequest"); err != nil {
-		log.Fatalf("register: %v", err)
-	}
-	if err := forpc.RegisterTypeByNamespace[EchoResponse](p, "forpc.it", "EchoResponse"); err != nil {
-		log.Fatalf("register: %v", err)
-	}
-
 	go func() { _ = p.Serve() }()
 
-	resp, err := forpc.CallUnary[EchoRequest, EchoResponse](p, "Test/Echo", &EchoRequest{Data: *msg})
+	resp, err := forpc.CallUnary[pb.EchoRequest, pb.EchoResponse](p, "Test/Echo", &pb.EchoRequest{Data: *msg})
 	if err != nil {
 		log.Fatalf("call: %v", err)
 	}

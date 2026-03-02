@@ -13,15 +13,13 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/bytemain/forpc/go/forpc/pb"
 )
 
-type interopEchoRequest struct {
-	Data string
-}
+type interopEchoRequest = pb.EchoRequest
 
-type interopEchoResponse struct {
-	Result string
-}
+type interopEchoResponse = pb.EchoResponse
 
 func TestInteropRustGoUnary(t *testing.T) {
 	url := pickTCPURL(t)
