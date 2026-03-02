@@ -3,12 +3,12 @@ use std::env;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
-use fory::ForyObject;
 use forpc::{BidiStream, RpcPeer};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-#[derive(ForyObject, Debug, Clone)]
+#[derive(prost::Message, Clone)]
 struct TcpChunk {
+    #[prost(bytes = "vec", tag = "1")]
     data: Vec<u8>,
 }
 

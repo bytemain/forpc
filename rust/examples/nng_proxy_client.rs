@@ -1,16 +1,17 @@
 use std::env;
 use std::sync::Arc;
 
-use fory::ForyObject;
 use forpc::RpcPeer;
 
-#[derive(ForyObject, Debug, Clone, PartialEq)]
+#[derive(prost::Message, Clone, PartialEq)]
 struct TestRequest {
+    #[prost(string, tag = "1")]
     data: String,
 }
 
-#[derive(ForyObject, Debug, Clone, PartialEq)]
+#[derive(prost::Message, Clone, PartialEq)]
 struct TestResponse {
+    #[prost(string, tag = "1")]
     result: String,
 }
 

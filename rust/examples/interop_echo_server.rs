@@ -3,7 +3,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use bytes::Bytes;
-use fory::ForyObject;
 use forpc::RpcPeer;
 use forpc::transport::nng::{AsyncRouter, InboundFrame, ServerTransport};
 use tokio::sync::{mpsc, Mutex};
@@ -21,13 +20,15 @@ fn hex_prefix(data: &[u8], limit: usize) -> String {
     s
 }
 
-#[derive(ForyObject, Debug, Clone)]
+#[derive(prost::Message, Clone)]
 struct EchoRequest {
+    #[prost(string, tag = "1")]
     data: String,
 }
 
-#[derive(ForyObject, Debug, Clone)]
+#[derive(prost::Message, Clone)]
 struct EchoResponse {
+    #[prost(string, tag = "1")]
     result: String,
 }
 

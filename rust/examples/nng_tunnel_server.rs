@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
 
-use fory::ForyObject;
 use forpc::{Request, Response, RpcListener, RpcPeer, Status, StatusCode};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-#[derive(ForyObject, Debug, Clone)]
+#[derive(prost::Message, Clone)]
 struct TcpChunk {
+    #[prost(bytes = "vec", tag = "1")]
     data: Vec<u8>,
 }
 

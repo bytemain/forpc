@@ -1,20 +1,21 @@
 use std::env;
 use std::sync::Arc;
 
-use fory::ForyObject;
 use forpc::RpcPeer;
 
 #[path = "http_proxy/common.rs"]
 mod http_proxy_common;
 use http_proxy_common::HttpProxyTransport;
 
-#[derive(ForyObject, Debug, Clone, PartialEq)]
+#[derive(prost::Message, Clone, PartialEq)]
 struct TestRequest {
+    #[prost(string, tag = "1")]
     data: String,
 }
 
-#[derive(ForyObject, Debug, Clone, PartialEq)]
+#[derive(prost::Message, Clone, PartialEq)]
 struct TestResponse {
+    #[prost(string, tag = "1")]
     result: String,
 }
 

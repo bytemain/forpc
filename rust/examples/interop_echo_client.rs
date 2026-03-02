@@ -1,15 +1,16 @@
 use std::env;
 
-use fory::ForyObject;
 use forpc::RpcPeer;
 
-#[derive(ForyObject, Debug, Clone)]
+#[derive(prost::Message, Clone)]
 struct EchoRequest {
+    #[prost(string, tag = "1")]
     data: String,
 }
 
-#[derive(ForyObject, Debug, Clone)]
+#[derive(prost::Message, Clone)]
 struct EchoResponse {
+    #[prost(string, tag = "1")]
     result: String,
 }
 

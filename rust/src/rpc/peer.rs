@@ -5,8 +5,7 @@ use std::pin::Pin;
 use std::future::Future;
 use tokio::sync::{mpsc, Mutex, oneshot, RwLock};
 use bytes::Bytes;
-use fory::Fory;
-use fory_core::{Serializer, ForyDefault};
+use prost::Message;
 
 use super::protocol::{Packet, Call, Status, frame_kind};
 use super::error::{RpcError, RpcResult};
@@ -27,8 +26,6 @@ pub struct RpcPeer {
     pub(crate) early_inbound: Arc<Mutex<HashMap<u32, Vec<Packet>>>>,
     next_stream_id: AtomicU32,
     is_initiator: bool,
-    pub(crate) proto_fory: Arc<Mutex<Fory>>,
-    pub(crate) user_fory: Arc<Mutex<Fory>>,
     running: Arc<AtomicBool>,
 }
 
@@ -103,22 +100,16 @@ impl RpcPeer {
 
     pub async fn user_serialize<T>(&self, value: &T) -> RpcResult<Bytes>
     where
-        T: Serializer + Send + Sync + 'static,
+        T: Message + Send + Sync + 'static,
     {
-        let f = self.user_fory.lock().await;
-        Ok(Bytes::from(
-            f.serialize(value)
-                .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?,
-        ))
+        Ok(Bytes::from(value.encode_to_vec()))
     }
 
     pub async fn user_deserialize<T>(&self, bytes: &Bytes) -> RpcResult<T>
     where
-        T: Serializer + ForyDefault + Send + Sync + 'static,
+        T: Message + Default + Send + Sync + 'static,
     {
-        let f = self.user_fory.lock().await;
-        let mut reader = fory::Reader::new(bytes);
-        f.deserialize_from(&mut reader)
+        T::decode(bytes.as_ref())
             .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))
     }
 
@@ -127,20 +118,11 @@ impl RpcPeer {
     }
 
     pub async fn send_stream_trailers(&self, stream_id: u32, status: &Status) -> RpcResult<()> {
-        let packet = {
-            let mut f = self.proto_fory.lock().await;
-            Packet::trailers(stream_id, status, &mut f)
-                .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?
-        };
+        let packet = Packet::trailers(stream_id, status);
         self.send_packet(packet).await
     }
 
     pub fn new(transport: impl Transport + 'static, is_initiator: bool) -> Self {
-        let mut proto_fory = Fory::default().compatible(true).xlang(true);
-        proto_fory.register::<Call>(2).unwrap();
-        proto_fory.register::<Status>(3).unwrap();
-        let user_fory = Fory::default().compatible(true).xlang(true);
-
         Self {
             transport: Arc::new(transport),
             handlers: Arc::new(RwLock::new(HashMap::new())),
@@ -149,29 +131,23 @@ impl RpcPeer {
             early_inbound: Arc::new(Mutex::new(HashMap::new())),
             next_stream_id: AtomicU32::new(if is_initiator { 1 } else { 2 }),
             is_initiator,
-            proto_fory: Arc::new(Mutex::new(proto_fory)),
-            user_fory: Arc::new(Mutex::new(user_fory)),
             running: Arc::new(AtomicBool::new(true)),
         }
     }
 
-    pub async fn register_type<T>(&self, id: u32) -> RpcResult<()>
+    pub async fn register_type<T>(&self, _id: u32) -> RpcResult<()>
     where
-        T: fory_core::StructSerializer + Serializer + ForyDefault + Send + Sync + 'static,
+        T: Message + Default + Send + Sync + 'static,
     {
-        let mut f = self.user_fory.lock().await;
-        f.register::<T>(id)
-            .map_err(|e| RpcError::new(StatusCode::INVALID_ARGUMENT, e.to_string()))?;
+        // No-op: protobuf types are self-describing and don't need registration
         Ok(())
     }
 
-    pub async fn register_type_by_namespace<T>(&self, namespace: &str, type_name: &str) -> RpcResult<()>
+    pub async fn register_type_by_namespace<T>(&self, _namespace: &str, _type_name: &str) -> RpcResult<()>
     where
-        T: fory_core::StructSerializer + Serializer + ForyDefault + Send + Sync + 'static,
+        T: Message + Default + Send + Sync + 'static,
     {
-        let mut f = self.user_fory.lock().await;
-        f.register_by_namespace::<T>(namespace, type_name)
-            .map_err(|e| RpcError::new(StatusCode::INVALID_ARGUMENT, e.to_string()))?;
+        // No-op: protobuf types are self-describing and don't need registration
         Ok(())
     }
     
@@ -194,15 +170,12 @@ impl RpcPeer {
     
     pub async fn register_unary<Req, Resp, F, Fut>(&self, method: &str, handler: F)
     where
-        Req: Serializer + ForyDefault + Send + Sync + 'static,
-        Resp: Serializer + ForyDefault + Send + Sync + 'static,
+        Req: Message + Default + Send + Sync + 'static,
+        Resp: Message + Default + Send + Sync + 'static,
         F: Fn(Req, HashMap<String, String>, Arc<RpcPeer>) -> Fut + Send + Sync + Clone + 'static,
         Fut: Future<Output = RpcResult<Resp>> + Send + 'static,
     {
-        let fory_arc = self.user_fory.clone();
-        
         self.register(method, move |req: Request, peer: Arc<RpcPeer>| {
-            let fory_arc = fory_arc.clone();
             let handler = handler.clone();
             
             async move {
@@ -221,22 +194,14 @@ impl RpcPeer {
                     return Response::error_with_code(StatusCode::INVALID_ARGUMENT, "Missing payload");
                 }
                 
-                let request: Req = {
-                    let f = fory_arc.lock().await;
-                    let mut reader = fory::Reader::new(&payload);
-                    match f.deserialize_from(&mut reader) {
-                        Ok(r) => r,
-                        Err(e) => return Response::error_with_code(StatusCode::INVALID_ARGUMENT, format!("Deserialize error: {}", e)),
-                    }
+                let request: Req = match Req::decode(payload.as_ref()) {
+                    Ok(r) => r,
+                    Err(e) => return Response::error_with_code(StatusCode::INVALID_ARGUMENT, format!("Deserialize error: {}", e)),
                 };
                 
                 match handler(request, req.metadata, peer).await {
                     Ok(response) => {
-                        let f = fory_arc.lock().await;
-                        match f.serialize(&response) {
-                            Ok(bytes) => Response::ok(Bytes::from(bytes)),
-                            Err(e) => Response::error(Status::internal(e.to_string())),
-                        }
+                        Response::ok(Bytes::from(response.encode_to_vec()))
                     }
                     Err(e) => Response::error(Status::new(e.code, e.message)),
                 }
@@ -263,16 +228,12 @@ impl RpcPeer {
     }
 
     async fn send_call_headers(&self, stream_id: u32, call: &Call) -> RpcResult<()> {
-        let packet = {
-            let mut f = self.proto_fory.lock().await;
-            Packet::headers(stream_id, call, &mut f)
-                .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?
-        };
+        let packet = Packet::headers(stream_id, call);
         self.send_packet(packet).await
     }
     
     pub async fn stream<Req, Resp>(self: &Arc<Self>, method: &str) -> RpcResult<BidiStream<Req, Resp>>
-    where Req: Serializer + Send + Sync + 'static, Resp: Serializer + ForyDefault + Send + Sync + 'static
+    where Req: Message + Send + Sync + 'static, Resp: Message + Default + Send + Sync + 'static
     {
         self.stream_with_metadata(method, HashMap::new()).await
     }
@@ -283,8 +244,8 @@ impl RpcPeer {
         metadata: HashMap<String, String>,
     ) -> RpcResult<BidiStream<Req, Resp>>
     where
-        Req: Serializer + Send + Sync + 'static,
-        Resp: Serializer + ForyDefault + Send + Sync + 'static,
+        Req: Message + Send + Sync + 'static,
+        Resp: Message + Default + Send + Sync + 'static,
     {
         let stream_id = self.alloc_stream_id();
         let call = Call {
@@ -318,7 +279,7 @@ impl RpcPeer {
     }
     
     pub async fn call<Req, Resp>(&self, method: &str, request: Req) -> RpcResult<Resp>
-    where Req: Serializer + Send + Sync + 'static, Resp: Serializer + ForyDefault + Send + Sync + 'static
+    where Req: Message + Send + Sync + 'static, Resp: Message + Default + Send + Sync + 'static
     {
         self.call_with_metadata(method, request, HashMap::new()).await
     }
@@ -330,8 +291,8 @@ impl RpcPeer {
         metadata: HashMap<String, String>,
     ) -> RpcResult<Resp>
     where
-        Req: Serializer + Send + Sync + 'static,
-        Resp: Serializer + ForyDefault + Send + Sync + 'static,
+        Req: Message + Send + Sync + 'static,
+        Resp: Message + Default + Send + Sync + 'static,
     {
         let payload = self.user_serialize(&request).await?;
         let resp_bytes = self
@@ -439,11 +400,8 @@ impl RpcPeer {
         let stream_id = packet.stream_id;
         match packet.kind {
             frame_kind::HEADERS => {
-                let call: Call = {
-                    let f = self.proto_fory.lock().await;
-                    let mut reader = fory::Reader::new(&packet.payload);
-                    f.deserialize_from(&mut reader).map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?
-                };
+                let call: Call = Call::decode(packet.payload.as_ref())
+                    .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?;
                 
                 let handler = {
                     let h = self.handlers.read().await;
@@ -529,10 +487,7 @@ impl RpcPeer {
         if let Some(payload) = response.payload {
             self.send_packet(Packet::data(stream_id, payload)).await?;
         }
-        let packet = {
-            let mut f = self.proto_fory.lock().await;
-            Packet::trailers(stream_id, &response.status, &mut f).map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?
-        };
+        let packet = Packet::trailers(stream_id, &response.status);
         self.send_packet(packet).await
     }
 
@@ -552,13 +507,9 @@ impl RpcPeer {
             frame_kind::TRAILERS => {
                 let mut pending = self.pending_calls.lock().await;
                 if let Some(mut call) = pending.remove(&stream_id) {
-                     let status: Status = {
-                         let f = self.proto_fory.lock().await;
-                         let mut reader = fory::Reader::new(&packet.payload);
-                         match f.deserialize_from(&mut reader) {
-                             Ok(s) => s,
-                             Err(e) => Status::internal(e.to_string()),
-                         }
+                     let status: Status = match Status::decode(packet.payload.as_ref()) {
+                         Ok(s) => s,
+                         Err(e) => Status::internal(e.to_string()),
                      };
                      
                      if let Some(tx) = call.tx {
@@ -584,7 +535,6 @@ impl RpcPeer {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use fory::ForyObject;
     use tokio::task::JoinHandle;
     use crate::BoxError;
 
@@ -628,13 +578,15 @@ mod tests {
         }
     }
 
-    #[derive(ForyObject, Debug, Clone, PartialEq)]
+    #[derive(prost::Message, Clone, PartialEq)]
     struct TestRequest {
+        #[prost(string, tag = "1")]
         data: String,
     }
 
-    #[derive(ForyObject, Debug, Clone, PartialEq)]
+    #[derive(prost::Message, Clone, PartialEq)]
     struct TestResponse {
+        #[prost(string, tag = "1")]
         result: String,
     }
 
@@ -644,19 +596,11 @@ mod tests {
         })
     }
 
-    async fn register_test_types(peer: &Arc<RpcPeer>) {
-        peer.register_type::<TestRequest>(4).await.unwrap();
-        peer.register_type::<TestResponse>(5).await.unwrap();
-    }
-
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn unary_call_smoke_channel_transport() {
         let (ta, tb) = ChannelTransport::pair(256);
         let a = Arc::new(RpcPeer::new(ta, true));
         let b = Arc::new(RpcPeer::new(tb, false));
-
-        register_test_types(&a).await;
-        register_test_types(&b).await;
 
         b.register_unary("Test/Echo", |req: TestRequest, _meta, _peer| async move {
             Ok(TestResponse { result: req.data })
@@ -678,9 +622,6 @@ mod tests {
         let (ta, tb) = ChannelTransport::pair(256);
         let a = Arc::new(RpcPeer::new(ta, true));
         let b = Arc::new(RpcPeer::new(tb, false));
-
-        register_test_types(&a).await;
-        register_test_types(&b).await;
 
         b.register_unary("Test/EchoMeta", |req: TestRequest, meta, _peer| async move {
             let ok = meta.get("k").map(|v| v.as_str()) == Some("v");
@@ -708,9 +649,6 @@ mod tests {
         let (ta, tb) = ChannelTransport::pair(256);
         let a = Arc::new(RpcPeer::new(ta, true));
         let b = Arc::new(RpcPeer::new(tb, false));
-
-        register_test_types(&a).await;
-        register_test_types(&b).await;
 
         b.register_unary("Test/Echo", |req: TestRequest, _meta, _peer| async move {
             Ok(TestResponse { result: req.data })

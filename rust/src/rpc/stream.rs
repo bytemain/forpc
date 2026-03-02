@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use fory::Reader;
-use fory_core::{Serializer, ForyDefault};
+use prost::Message;
 use super::peer::RpcPeer;
 use super::protocol::{Packet, Status, frame_kind};
 use super::error::{RpcError, RpcResult};
@@ -14,7 +13,7 @@ pub struct BidiStream<Req, Resp> {
     pub(crate) _marker: std::marker::PhantomData<(Req, Resp)>,
 }
 
-impl<Req: Serializer + Send + Sync + 'static, Resp: Serializer + ForyDefault + Send + Sync + 'static> BidiStream<Req, Resp> {
+impl<Req: Message + Send + Sync + 'static, Resp: Message + Default + Send + Sync + 'static> BidiStream<Req, Resp> {
     pub async fn send(&self, message: Req) -> RpcResult<()> {
         let payload = self.peer.user_serialize(&message).await?;
         self.peer.send_stream_data(self.stream_id, payload).await
@@ -29,9 +28,7 @@ impl<Req: Serializer + Send + Sync + 'static, Resp: Serializer + ForyDefault + S
                         Ok(Some(msg))
                     }
                     frame_kind::TRAILERS => {
-                        let fory = self.peer.proto_fory.lock().await;
-                        let mut reader = Reader::new(&packet.payload);
-                        let status: Status = fory.deserialize_from(&mut reader)
+                        let status: Status = Status::decode(packet.payload.as_ref())
                              .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?;
                         
                         if status.is_ok() {

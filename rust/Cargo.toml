@@ -6,8 +6,7 @@ edition = "2024"
 [dependencies]
 anng = { git = "https://github.com/bytemain/nng-rs.git", branch = "main" }
 tokio = { version = "1.49.0", features = ["full"] }
-fory = { git = "https://github.com/apache/fory", rev = "7a19a069b59e" }
-fory-core = { git = "https://github.com/apache/fory", rev = "7a19a069b59e" }
+prost = "0.13"
 async-trait = "0.1.89"
 bytes = "1.11.1"
 axum = "0.7.9"

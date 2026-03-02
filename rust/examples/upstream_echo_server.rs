@@ -1,15 +1,16 @@
 use std::env;
 
-use fory::ForyObject;
 use forpc::RpcListener;
 
-#[derive(ForyObject, Debug, Clone, PartialEq)]
+#[derive(prost::Message, Clone, PartialEq)]
 struct TestRequest {
+    #[prost(string, tag = "1")]
     data: String,
 }
 
-#[derive(ForyObject, Debug, Clone, PartialEq)]
+#[derive(prost::Message, Clone, PartialEq)]
 struct TestResponse {
+    #[prost(string, tag = "1")]
     result: String,
 }
 
