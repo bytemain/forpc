@@ -45,22 +45,15 @@ export class RawServer {
 
   /**
    * Create a server listening on the given URL with a single handler for a method.
-   * This is a convenience factory for simple single-method servers.
+   * This is a fire-and-forget convenience factory for simple single-method servers.
+   * The server starts asynchronously; for full control use `bind()` + `register()` + `serve()`.
    */
-  static listen(url: string, method: string, handler: RawHandler): RawServer {
-    let server: RawServer | undefined
+  static listen(url: string, method: string, handler: RawHandler): void {
     AsyncRouter.listen(url).then((router) => {
-      server = new RawServer(router)
+      const server = new RawServer(router)
       server.handlers.set(method, handler)
       server.startServeLoop()
     })
-    // Return a placeholder that will be populated
-    const placeholder = Object.create(RawServer.prototype) as RawServer
-    placeholder.handlers = new Map()
-    placeholder.handlers.set(method, handler)
-    placeholder.running = false
-    placeholder.streams = new Map()
-    return placeholder
   }
 
   /**
@@ -100,9 +93,10 @@ export class RawServer {
           if (packet.streamId === 0) continue
 
           await this.handlePacket(packet, msg)
-        } catch {
+        } catch (err) {
           if (this.running) {
             this.running = false
+            console.error('RawServer serve loop error:', err)
           }
           break
         }
