@@ -1,0 +1,180 @@
+/**
+ * Protocol layer for forpc
+ *
+ * Implements Packet framing and protobuf message encoding/decoding
+ * that is compatible with the Rust and Go implementations.
+ *
+ * Packet wire format: [stream_id: u32 BE][kind: u8][payload...]
+ * Protobuf messages: Call (method + metadata), Status (code + message)
+ */
+
+import protobuf from 'protobufjs'
+
+// Frame kind constants matching Rust/Go
+export const FrameKind = {
+  HEADERS: 0,
+  DATA: 1,
+  TRAILERS: 2,
+} as const
+
+// gRPC-compatible status codes matching Rust/Go
+export const StatusCode = {
+  OK: 0,
+  CANCELLED: 1,
+  UNKNOWN: 2,
+  INVALID_ARGUMENT: 3,
+  DEADLINE_EXCEEDED: 4,
+  NOT_FOUND: 5,
+  ALREADY_EXISTS: 6,
+  PERMISSION_DENIED: 7,
+  RESOURCE_EXHAUSTED: 8,
+  FAILED_PRECONDITION: 9,
+  ABORTED: 10,
+  OUT_OF_RANGE: 11,
+  UNIMPLEMENTED: 12,
+  INTERNAL: 13,
+  UNAVAILABLE: 14,
+  DATA_LOSS: 15,
+  UNAUTHENTICATED: 16,
+} as const
+
+// Build protobuf types programmatically to match forpc.proto
+const root = new protobuf.Root()
+
+const callType = new protobuf.Type('Call')
+  .add(new protobuf.Field('method', 1, 'string'))
+  .add(new protobuf.MapField('metadata', 2, 'string', 'string'))
+
+const statusType = new protobuf.Type('Status')
+  .add(new protobuf.Field('code', 1, 'uint32'))
+  .add(new protobuf.Field('message', 2, 'string'))
+
+root.add(callType)
+root.add(statusType)
+
+const CallMessage = root.lookupType('Call')
+const StatusMessage = root.lookupType('Status')
+
+export interface Call {
+  method: string
+  metadata: Record<string, string>
+}
+
+export interface Status {
+  code: number
+  message: string
+}
+
+export interface Packet {
+  streamId: number
+  kind: number
+  payload: Buffer
+}
+
+/**
+ * Encode a Call message to protobuf bytes
+ */
+export function encodeCall(call: Call): Buffer {
+  const msg = CallMessage.create({
+    method: call.method,
+    metadata: call.metadata || {},
+  })
+  return Buffer.from(CallMessage.encode(msg).finish())
+}
+
+/**
+ * Decode protobuf bytes to a Call message
+ */
+export function decodeCall(buf: Buffer): Call {
+  const msg = CallMessage.decode(buf) as unknown as { method: string; metadata: Record<string, string> }
+  return {
+    method: msg.method || '',
+    metadata: msg.metadata || {},
+  }
+}
+
+/**
+ * Encode a Status message to protobuf bytes
+ */
+export function encodeStatus(status: Status): Buffer {
+  const msg = StatusMessage.create({
+    code: status.code,
+    message: status.message,
+  })
+  return Buffer.from(StatusMessage.encode(msg).finish())
+}
+
+/**
+ * Decode protobuf bytes to a Status message
+ */
+export function decodeStatus(buf: Buffer): Status {
+  const msg = StatusMessage.decode(buf) as unknown as { code: number; message: string }
+  return {
+    code: msg.code || 0,
+    message: msg.message || '',
+  }
+}
+
+/**
+ * Encode a Packet to wire format: [stream_id: u32 BE][kind: u8][payload...]
+ */
+export function encodePacket(packet: Packet): Buffer {
+  const buf = Buffer.alloc(5 + packet.payload.length)
+  buf.writeUInt32BE(packet.streamId, 0)
+  buf.writeUInt8(packet.kind, 4)
+  packet.payload.copy(buf, 5)
+  return buf
+}
+
+/**
+ * Decode wire format bytes to a Packet
+ */
+export function decodePacket(data: Buffer): Packet {
+  if (data.length < 5) {
+    throw new Error(`packet too short: len=${data.length}`)
+  }
+  const streamId = data.readUInt32BE(0)
+  const kind = data.readUInt8(4)
+  const payload = data.subarray(5)
+  return { streamId, kind, payload: Buffer.from(payload) }
+}
+
+/**
+ * Create a HEADERS packet with an encoded Call
+ */
+export function headersPacket(streamId: number, call: Call): Packet {
+  return {
+    streamId,
+    kind: FrameKind.HEADERS,
+    payload: encodeCall(call),
+  }
+}
+
+/**
+ * Create a DATA packet
+ */
+export function dataPacket(streamId: number, payload: Buffer): Packet {
+  return {
+    streamId,
+    kind: FrameKind.DATA,
+    payload,
+  }
+}
+
+/**
+ * Create a TRAILERS packet with an encoded Status
+ */
+export function trailersPacket(streamId: number, status: Status): Packet {
+  return {
+    streamId,
+    kind: FrameKind.TRAILERS,
+    payload: encodeStatus(status),
+  }
+}
+
+/**
+ * Create an OK status
+ */
+export function statusOk(): Status {
+  return { code: StatusCode.OK, message: 'OK' }
+}
