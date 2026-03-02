@@ -128,3 +128,8 @@ dist
 !.yarn/sdks
 !.yarn/versions
 /npm
+
+# Transport folder - ignore native bindings, keep generated JS/TS files
+transport/*.node
+transport/*.wasm
+transport/*.wasi.cjs

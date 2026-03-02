@@ -20,7 +20,8 @@
   "files": [
     "index.d.ts",
     "index.js",
-    "browser.js"
+    "browser.js",
+    "transport"
   ],
   "napi": {
     "binaryName": "forpc",
@@ -41,18 +42,18 @@
     "access": "public"
   },
   "scripts": {
-    "artifacts": "napi artifacts",
+    "artifacts": "napi artifacts -o transport",
     "bench": "node --import @oxc-node/core/register benchmark/bench.ts",
-    "build": "napi build --platform --release",
-    "build:debug": "napi build --platform",
+    "build": "napi build --platform --release -o transport",
+    "build:debug": "napi build --platform -o transport",
     "format": "run-p format:prettier format:rs format:toml",
     "format:prettier": "prettier . -w",
     "format:toml": "taplo format",
     "format:rs": "cargo fmt",
     "lint": "oxlint .",
-    "prepublishOnly": "napi prepublish -t npm",
+    "prepublishOnly": "napi prepublish -t npm -o transport",
     "test": "ava",
-    "preversion": "napi build --platform && git add .",
+    "preversion": "napi build --platform -o transport && git add .",
     "version": "napi version",
     "prepare": "husky"
   },
