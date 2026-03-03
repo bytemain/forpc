@@ -10,7 +10,7 @@ use anng::{AioError, Message, Socket};
 use bytes::Bytes;
 use napi::bindgen_prelude::Buffer;
 use napi_derive::napi;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 
 /// The high bit mask for request IDs, used to mark requests from this side
 const REQUEST_ID_HIGH_BIT: u32 = 0x8000_0000;
@@ -26,6 +26,7 @@ pub fn plus_100(input: u32) -> u32 {
 pub struct AsyncDealer {
   socket: Arc<Mutex<Socket<Req0Raw>>>,
   next_request_id: AtomicU32,
+  cancel: Arc<Notify>,
 }
 
 #[napi]
@@ -40,6 +41,7 @@ impl AsyncDealer {
     Ok(Self {
       socket: Arc::new(Mutex::new(socket)),
       next_request_id: AtomicU32::new(REQUEST_ID_HIGH_BIT),
+      cancel: Arc::new(Notify::new()),
     })
   }
 
@@ -69,12 +71,24 @@ impl AsyncDealer {
   /// Receive a message, returns DealerMessage
   #[napi]
   pub async fn recv(&self) -> napi::Result<DealerMessage> {
-    let mut socket = self.socket.lock().await;
-    let msg = socket
-      .recv()
-      .await
-      .map_err(|e: AioError| napi::Error::from_reason(format!("{:?}", e)))?;
-    Ok(DealerMessage { inner: msg })
+    tokio::select! {
+      result = async {
+        let mut socket = self.socket.lock().await;
+        socket.recv().await
+      } => {
+        let msg = result.map_err(|e: AioError| napi::Error::from_reason(format!("{:?}", e)))?;
+        Ok(DealerMessage { inner: msg })
+      }
+      _ = self.cancel.notified() => {
+        Err(napi::Error::from_reason("Dealer closed"))
+      }
+    }
+  }
+
+  /// Close the dealer, cancelling any pending recv operations
+  #[napi]
+  pub fn close(&self) {
+    self.cancel.notify_one();
   }
 }
 
@@ -104,6 +118,7 @@ impl DealerMessage {
 #[napi]
 pub struct AsyncRouter {
   socket: Arc<Mutex<Socket<Rep0Raw>>>,
+  cancel: Arc<Notify>,
 }
 
 #[napi]
@@ -117,18 +132,25 @@ impl AsyncRouter {
       .map_err(|e| napi::Error::from_reason(e.to_string()))?;
     Ok(Self {
       socket: Arc::new(Mutex::new(socket)),
+      cancel: Arc::new(Notify::new()),
     })
   }
 
   /// Receive a message from a client
   #[napi]
   pub async fn recv(&self) -> napi::Result<RouterMessage> {
-    let mut socket = self.socket.lock().await;
-    let msg = socket
-      .recv()
-      .await
-      .map_err(|e: AioError| napi::Error::from_reason(format!("{:?}", e)))?;
-    Ok(RouterMessage::from_msg(msg))
+    tokio::select! {
+      result = async {
+        let mut socket = self.socket.lock().await;
+        socket.recv().await
+      } => {
+        let msg = result.map_err(|e: AioError| napi::Error::from_reason(format!("{:?}", e)))?;
+        Ok(RouterMessage::from_msg(msg))
+      }
+      _ = self.cancel.notified() => {
+        Err(napi::Error::from_reason("Router closed"))
+      }
+    }
   }
 
   /// Send a response message back to the client
@@ -141,6 +163,12 @@ impl AsyncRouter {
       .await
       .map_err(|(e, _): (AioError, _)| napi::Error::from_reason(format!("{:?}", e)))?;
     Ok(())
+  }
+
+  /// Close the router, cancelling any pending recv operations
+  #[napi]
+  pub fn close(&self) {
+    self.cancel.notify_one();
   }
 }
 

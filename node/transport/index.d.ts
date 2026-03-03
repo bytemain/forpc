@@ -11,6 +11,8 @@ export declare class AsyncDealer {
   send(body: Buffer): Promise<number>
   /** Receive a message, returns DealerMessage */
   recv(): Promise<DealerMessage>
+  /** Close the dealer, cancelling any pending recv operations */
+  close(): void
 }
 
 /**
@@ -24,6 +26,8 @@ export declare class AsyncRouter {
   recv(): Promise<RouterMessage>
   /** Send a response message back to the client */
   send(msg: RouterMessage): Promise<void>
+  /** Close the router, cancelling any pending recv operations */
+  close(): void
 }
 
 /** Message received from an AsyncDealer */

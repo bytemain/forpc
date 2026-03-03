@@ -55,6 +55,13 @@ export class Peer {
     return new Peer(dealer)
   }
 
+  /**
+   * Close the peer and cancel pending operations
+   */
+  close(): void {
+    this.dealer.close()
+  }
+
   private allocStreamId(): number {
     const id = this.nextStreamId
     this.nextStreamId += 2

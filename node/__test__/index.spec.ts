@@ -16,6 +16,11 @@ test('AsyncDealer and AsyncRouter basic communication', async (t) => {
   // Start the dealer (client-side)
   const dealer = await AsyncDealer.dial(url)
 
+  t.teardown(() => {
+    dealer.close()
+    router.close()
+  })
+
   // Client sends a message
   const requestData = Buffer.from('Hello from client')
   const requestId = await dealer.send(requestData)

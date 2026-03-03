@@ -15,6 +15,11 @@ test('Peer and RawServer raw echo communication', async (t) => {
   // Connect the client
   const peer = await Peer.connect(url)
 
+  t.teardown(() => {
+    peer.close()
+    server.close()
+  })
+
   // Make an RPC call
   const response = await peer.callRaw('Raw/Echo', Buffer.from('Hello RPC'))
   t.deepEqual(response, Buffer.from('Hello RPC'))
@@ -32,6 +37,12 @@ test('Peer and RawServer with metadata', async (t) => {
   server.serve()
 
   const peer = await Peer.connect(url)
+
+  t.teardown(() => {
+    peer.close()
+    server.close()
+  })
+
   const response = await peer.callRaw('Test/WithMeta', Buffer.from('World'), { prefix: 'Hello ' })
   t.is(response.toString(), 'Hello World')
 })
@@ -52,6 +63,11 @@ test('Peer gets error for unregistered method', async (t) => {
   server.serve()
 
   const peer = await Peer.connect(url)
+
+  t.teardown(() => {
+    peer.close()
+    server.close()
+  })
 
   const err = await t.throwsAsync(() => peer.callRaw('NotExists/Method', Buffer.from('test')))
   t.truthy(err)

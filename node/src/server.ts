@@ -78,6 +78,14 @@ export class RawServer {
     this.startServeLoop()
   }
 
+  /**
+   * Stop the server and cancel pending operations
+   */
+  close(): void {
+    this.running = false
+    this.router.close()
+  }
+
   private startServeLoop(): void {
     if (this.running) return
     this.running = true
