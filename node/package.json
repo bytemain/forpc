@@ -46,6 +46,7 @@
     "bench": "node --import @oxc-node/core/register benchmark/bench.ts",
     "build": "napi build --platform --release -o transport",
     "build:debug": "napi build --platform -o transport",
+    "generate:proto": "pbjs -t static-module -w commonjs -o src/generated/forpc.js ../proto/forpc.proto && pbts -o src/generated/forpc.d.ts src/generated/forpc.js",
     "format": "run-p format:prettier format:rs format:toml",
     "format:prettier": "prettier . -w",
     "format:toml": "taplo format",
@@ -71,6 +72,7 @@
     "npm-run-all2": "^8.0.4",
     "oxlint": "^1.14.0",
     "prettier": "^3.6.2",
+    "protobufjs-cli": "^2.0.0",
     "tinybench": "^6.0.0",
     "typescript": "^5.9.2"
   },

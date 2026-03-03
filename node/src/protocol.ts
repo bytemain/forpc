@@ -8,7 +8,10 @@
  * Protobuf messages: Call (method + metadata), Status (code + message)
  */
 
-import protobuf from 'protobufjs'
+import proto from './generated/forpc.js'
+
+const CallMessage = proto.forpc.Call
+const StatusMessage = proto.forpc.Status
 
 // Frame kind constants matching Rust/Go
 export const FrameKind = {
@@ -37,23 +40,6 @@ export const StatusCode = {
   DATA_LOSS: 15,
   UNAUTHENTICATED: 16,
 } as const
-
-// Build protobuf types programmatically to match forpc.proto
-const root = new protobuf.Root()
-
-const callType = new protobuf.Type('Call')
-  .add(new protobuf.Field('method', 1, 'string'))
-  .add(new protobuf.MapField('metadata', 2, 'string', 'string'))
-
-const statusType = new protobuf.Type('Status')
-  .add(new protobuf.Field('code', 1, 'uint32'))
-  .add(new protobuf.Field('message', 2, 'string'))
-
-root.add(callType)
-root.add(statusType)
-
-const CallMessage = root.lookupType('Call')
-const StatusMessage = root.lookupType('Status')
 
 export interface Call {
   method: string
