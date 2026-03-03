@@ -15,14 +15,14 @@ test('Peer and RawServer raw echo communication', async (t) => {
   // Connect the client
   const peer = await Peer.connect(url)
 
-  // Make an RPC call
-  const response = await peer.callRaw('Raw/Echo', Buffer.from('Hello RPC'))
-  t.deepEqual(response, Buffer.from('Hello RPC'))
-
   t.teardown(() => {
     peer.close()
     server.close()
   })
+
+  // Make an RPC call
+  const response = await peer.callRaw('Raw/Echo', Buffer.from('Hello RPC'))
+  t.deepEqual(response, Buffer.from('Hello RPC'))
 })
 
 test('Peer and RawServer with metadata', async (t) => {
@@ -37,13 +37,14 @@ test('Peer and RawServer with metadata', async (t) => {
   server.serve()
 
   const peer = await Peer.connect(url)
-  const response = await peer.callRaw('Test/WithMeta', Buffer.from('World'), { prefix: 'Hello ' })
-  t.is(response.toString(), 'Hello World')
 
   t.teardown(() => {
     peer.close()
     server.close()
   })
+
+  const response = await peer.callRaw('Test/WithMeta', Buffer.from('World'), { prefix: 'Hello ' })
+  t.is(response.toString(), 'Hello World')
 })
 
 test('RpcError has correct properties', (t) => {
@@ -63,15 +64,15 @@ test('Peer gets error for unregistered method', async (t) => {
 
   const peer = await Peer.connect(url)
 
+  t.teardown(() => {
+    peer.close()
+    server.close()
+  })
+
   const err = await t.throwsAsync(() => peer.callRaw('NotExists/Method', Buffer.from('test')))
   t.truthy(err)
   t.true(err instanceof RpcError)
   if (err instanceof RpcError) {
     t.is(err.code, 12) // UNIMPLEMENTED
   }
-
-  t.teardown(() => {
-    peer.close()
-    server.close()
-  })
 })
