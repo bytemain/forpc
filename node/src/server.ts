@@ -5,7 +5,7 @@
  * Uses AsyncRouter for the underlying transport.
  */
 
-import { AsyncRouter, RouterMessage } from '../transport'
+import { AsyncRouter, RouterMessage } from '../transport/index.js'
 import {
   type Status,
   StatusCode,
@@ -16,7 +16,7 @@ import {
   trailersPacket,
   statusOk,
   decodeCall,
-} from './protocol'
+} from './protocol.ts'
 
 export type RawHandler = (payload: Buffer, metadata: Record<string, string>) => Buffer | Promise<Buffer>
 
