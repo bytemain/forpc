@@ -7,7 +7,7 @@
  * Enables Node.js to invoke RPC methods on Rust/Go servers and vice versa.
  */
 
-import { AsyncDealer } from '../transport'
+import { AsyncDealer } from '../transport/index.js'
 import {
   type Call,
   type Status,

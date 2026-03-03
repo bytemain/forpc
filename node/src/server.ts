@@ -5,7 +5,7 @@
  * Uses AsyncRouter for the underlying transport.
  */
 
-import { AsyncRouter, RouterMessage } from '../transport'
+import { AsyncRouter, RouterMessage } from '../transport/index.js'
 import {
   type Status,
   StatusCode,
