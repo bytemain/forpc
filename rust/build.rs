@@ -3,5 +3,5 @@ fn main() {
         &["../proto/forpc.proto", "../proto/forpc_test.proto"],
         &["../proto/"],
     )
-    .unwrap();
+    .expect("Failed to compile protobuf files");
 }
