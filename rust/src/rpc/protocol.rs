@@ -105,13 +105,7 @@ mod tests {
     }
 }
 
-#[derive(Message, Clone)]
-pub struct Call {
-    #[prost(string, tag = "1")]
-    pub method: String,
-    #[prost(map = "string, string", tag = "2")]
-    pub metadata: HashMap<String, String>,
-}
+include!(concat!(env!("OUT_DIR"), "/forpc.rs"));
 
 impl Call {
     pub fn new(method: impl Into<String>) -> Self {
@@ -129,14 +123,6 @@ impl Call {
     pub fn timeout_ms(&self) -> Option<u64> {
         self.metadata.get(":timeout").and_then(|v| v.parse().ok())
     }
-}
-
-#[derive(Message, Clone)]
-pub struct Status {
-    #[prost(uint32, tag = "1")]
-    pub code: u32,
-    #[prost(string, tag = "2")]
-    pub message: String,
 }
 
 impl Status {

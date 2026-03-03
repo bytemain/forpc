@@ -1,18 +1,7 @@
 use std::env;
 
 use forpc::RpcListener;
-
-#[derive(prost::Message, Clone, PartialEq)]
-struct TestRequest {
-    #[prost(string, tag = "1")]
-    data: String,
-}
-
-#[derive(prost::Message, Clone, PartialEq)]
-struct TestResponse {
-    #[prost(string, tag = "1")]
-    result: String,
-}
+use forpc::pb::test::{TestRequest, TestResponse};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
