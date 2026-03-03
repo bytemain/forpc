@@ -560,7 +560,7 @@ if (!nativeBinding || process.env.NAPI_RS_FORCE_WASI) {
 
 if (!nativeBinding) {
   if (loadErrors.length > 0) {
-    const errorMessages = loadErrors.map((e) => `\n - ${e.message}`).join('')
+    const errorMessages = loadErrors.map((e) => `\n - ${e?.message || e}`).join('')
     throw new Error(
       `Cannot find native binding. ` +
         `npm has a bug related to optional dependencies (https://github.com/npm/cli/issues/4828). ` +
