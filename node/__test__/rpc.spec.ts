@@ -18,6 +18,11 @@ test('Peer and RawServer raw echo communication', async (t) => {
   // Make an RPC call
   const response = await peer.callRaw('Raw/Echo', Buffer.from('Hello RPC'))
   t.deepEqual(response, Buffer.from('Hello RPC'))
+
+  t.teardown(() => {
+    peer.close()
+    server.close()
+  })
 })
 
 test('Peer and RawServer with metadata', async (t) => {
@@ -34,6 +39,11 @@ test('Peer and RawServer with metadata', async (t) => {
   const peer = await Peer.connect(url)
   const response = await peer.callRaw('Test/WithMeta', Buffer.from('World'), { prefix: 'Hello ' })
   t.is(response.toString(), 'Hello World')
+
+  t.teardown(() => {
+    peer.close()
+    server.close()
+  })
 })
 
 test('RpcError has correct properties', (t) => {
@@ -59,4 +69,9 @@ test('Peer gets error for unregistered method', async (t) => {
   if (err instanceof RpcError) {
     t.is(err.code, 12) // UNIMPLEMENTED
   }
+
+  t.teardown(() => {
+    peer.close()
+    server.close()
+  })
 })

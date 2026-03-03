@@ -15,7 +15,7 @@ bytes = "1"
 # Disable default features to avoid pulling in rt-multi-thread from anng's tokio feature
 # napi's tokio_rt already provides the runtime
 anng = { git = "https://github.com/bytemain/nng-rs.git", branch = "main", default-features = false, features = ["vendored"] }
-tokio = { version = "1", default-features = false, features = ["sync"] }
+tokio = { version = "1", default-features = false, features = ["sync", "macros"] }
 
 [build-dependencies]
 napi-build = "2"
