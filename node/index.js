@@ -5,7 +5,24 @@
  * plus the protocol, Peer, and RawServer modules for RPC support.
  */
 
-const transport = require('./transport')
+let transport
+try {
+  transport = require('./transport')
+} catch (e) {
+  // Append cause chain to error message so native binding load errors
+  // (e.g. glibc version mismatch) are visible in CI logs,
+  // since most runtimes don't print Error.cause by default.
+  const messages = []
+  let current = e.cause
+  while (current) {
+    messages.push(current.message)
+    current = current.cause
+  }
+  if (messages.length > 0) {
+    e.message += '\nLoad errors:\n - ' + messages.join('\n - ')
+  }
+  throw e
+}
 
 // Re-export all native bindings
 module.exports = transport
