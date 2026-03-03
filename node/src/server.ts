@@ -16,7 +16,7 @@ import {
   trailersPacket,
   statusOk,
   decodeCall,
-} from './protocol'
+} from './protocol.ts'
 
 export type RawHandler = (payload: Buffer, metadata: Record<string, string>) => Buffer | Promise<Buffer>
 

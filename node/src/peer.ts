@@ -20,7 +20,7 @@ import {
   trailersPacket,
   statusOk,
   decodeStatus,
-} from './protocol'
+} from './protocol.ts'
 
 export class RpcError extends Error {
   code: number
