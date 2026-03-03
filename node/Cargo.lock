@@ -14,7 +14,7 @@ dependencies = [
 [[package]]
 name = "anng"
 version = "0.2.0-v2pre.2"
-source = "git+https://github.com/bytemain/nng-rs.git?branch=main#4fa605a34c59a08779140bcfa4fc026ac741b899"
+source = "git+https://github.com/bytemain/nng-rs.git?branch=main#bbd5d0efc0627a17aa1a1dfbc5ed3609c22bea41"
 dependencies = [
  "bytes",
  "nng-sys",
@@ -371,7 +371,7 @@ dependencies = [
 [[package]]
 name = "nng-sys"
 version = "0.4.0-v2pre.2+v2.0.0-alpha.7"
-source = "git+https://github.com/bytemain/nng-rs.git?branch=main#4fa605a34c59a08779140bcfa4fc026ac741b899"
+source = "git+https://github.com/bytemain/nng-rs.git?branch=main#bbd5d0efc0627a17aa1a1dfbc5ed3609c22bea41"
 dependencies = [
  "bindgen",
  "cc",
