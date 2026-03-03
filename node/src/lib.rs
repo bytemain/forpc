@@ -88,7 +88,7 @@ impl AsyncDealer {
   /// Close the dealer, cancelling any pending recv operations
   #[napi]
   pub fn close(&self) {
-    self.cancel.notify_waiters();
+    self.cancel.notify_one();
   }
 }
 
@@ -168,7 +168,7 @@ impl AsyncRouter {
   /// Close the router, cancelling any pending recv operations
   #[napi]
   pub fn close(&self) {
-    self.cancel.notify_waiters();
+    self.cancel.notify_one();
   }
 }
 
