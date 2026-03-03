@@ -105,5 +105,8 @@
     "trailingComma": "all",
     "singleQuote": true,
     "arrowParens": "always"
+  },
+  "dependencies": {
+    "protobufjs": "^7.5.4"
   }
 }

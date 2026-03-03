@@ -1,8 +1,8 @@
 /**
  * forpc - A fast RPC library for Node.js
  *
- * This module re-exports the native bindings from the transport layer.
- * The native bindings provide efficient async communication using the nng library.
+ * This module re-exports the native bindings from the transport layer,
+ * plus the protocol, Peer, and RawServer modules for RPC support.
  */
 
 const transport = require('./transport')
@@ -14,3 +14,26 @@ module.exports.AsyncRouter = transport.AsyncRouter
 module.exports.DealerMessage = transport.DealerMessage
 module.exports.RouterMessage = transport.RouterMessage
 module.exports.plus100 = transport.plus100
+
+// Re-export protocol types and helpers
+const protocol = require('./src/protocol')
+module.exports.FrameKind = protocol.FrameKind
+module.exports.StatusCode = protocol.StatusCode
+module.exports.encodeCall = protocol.encodeCall
+module.exports.decodeCall = protocol.decodeCall
+module.exports.encodeStatus = protocol.encodeStatus
+module.exports.decodeStatus = protocol.decodeStatus
+module.exports.encodePacket = protocol.encodePacket
+module.exports.decodePacket = protocol.decodePacket
+module.exports.headersPacket = protocol.headersPacket
+module.exports.dataPacket = protocol.dataPacket
+module.exports.trailersPacket = protocol.trailersPacket
+module.exports.statusOk = protocol.statusOk
+
+// Re-export RPC classes
+const { Peer, RpcError } = require('./src/peer')
+module.exports.Peer = Peer
+module.exports.RpcError = RpcError
+
+const { RawServer } = require('./src/server')
+module.exports.RawServer = RawServer
