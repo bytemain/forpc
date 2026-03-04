@@ -18,6 +18,50 @@ $root.forpc = (function() {
      */
     var forpc = {};
 
+    /**
+     * StatusCode enum.
+     * @name forpc.StatusCode
+     * @enum {number}
+     * @property {number} OK=0 OK value
+     * @property {number} CANCELLED=1 CANCELLED value
+     * @property {number} UNKNOWN=2 UNKNOWN value
+     * @property {number} INVALID_ARGUMENT=3 INVALID_ARGUMENT value
+     * @property {number} DEADLINE_EXCEEDED=4 DEADLINE_EXCEEDED value
+     * @property {number} NOT_FOUND=5 NOT_FOUND value
+     * @property {number} ALREADY_EXISTS=6 ALREADY_EXISTS value
+     * @property {number} PERMISSION_DENIED=7 PERMISSION_DENIED value
+     * @property {number} RESOURCE_EXHAUSTED=8 RESOURCE_EXHAUSTED value
+     * @property {number} FAILED_PRECONDITION=9 FAILED_PRECONDITION value
+     * @property {number} ABORTED=10 ABORTED value
+     * @property {number} OUT_OF_RANGE=11 OUT_OF_RANGE value
+     * @property {number} UNIMPLEMENTED=12 UNIMPLEMENTED value
+     * @property {number} INTERNAL=13 INTERNAL value
+     * @property {number} UNAVAILABLE=14 UNAVAILABLE value
+     * @property {number} DATA_LOSS=15 DATA_LOSS value
+     * @property {number} UNAUTHENTICATED=16 UNAUTHENTICATED value
+     */
+    forpc.StatusCode = (function() {
+        var valuesById = {}, values = Object.create(valuesById);
+        values[valuesById[0] = "OK"] = 0;
+        values[valuesById[1] = "CANCELLED"] = 1;
+        values[valuesById[2] = "UNKNOWN"] = 2;
+        values[valuesById[3] = "INVALID_ARGUMENT"] = 3;
+        values[valuesById[4] = "DEADLINE_EXCEEDED"] = 4;
+        values[valuesById[5] = "NOT_FOUND"] = 5;
+        values[valuesById[6] = "ALREADY_EXISTS"] = 6;
+        values[valuesById[7] = "PERMISSION_DENIED"] = 7;
+        values[valuesById[8] = "RESOURCE_EXHAUSTED"] = 8;
+        values[valuesById[9] = "FAILED_PRECONDITION"] = 9;
+        values[valuesById[10] = "ABORTED"] = 10;
+        values[valuesById[11] = "OUT_OF_RANGE"] = 11;
+        values[valuesById[12] = "UNIMPLEMENTED"] = 12;
+        values[valuesById[13] = "INTERNAL"] = 13;
+        values[valuesById[14] = "UNAVAILABLE"] = 14;
+        values[valuesById[15] = "DATA_LOSS"] = 15;
+        values[valuesById[16] = "UNAUTHENTICATED"] = 16;
+        return values;
+    })();
+
     forpc.Call = (function() {
 
         /**
