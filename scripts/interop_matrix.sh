@@ -79,8 +79,12 @@ rust_echo_client="$repo_root/rust/target/debug/examples/interop_echo_client"
 rust_raw_echo_server="$repo_root/rust/target/debug/examples/interop_raw_echo_server"
 rust_raw_echo_client="$repo_root/rust/target/debug/examples/interop_raw_echo_client"
 
-node_raw_server="node $repo_root/node/scripts/interop_raw_echo_server.js"
-node_raw_client="node $repo_root/node/scripts/interop_raw_echo_client.js"
+node_cmd="node --import $repo_root/node/node_modules/@oxc-node/core/register.mjs"
+node_dir="$repo_root/node"
+node_echo_server="$node_cmd $node_dir/scripts/interop_echo_server.js"
+node_echo_client="$node_cmd $node_dir/scripts/interop_echo_client.js"
+node_raw_server="$node_cmd $node_dir/scripts/interop_raw_echo_server.js"
+node_raw_client="$node_cmd $node_dir/scripts/interop_raw_echo_client.js"
 
 run_with_retries() {
   local name="$1"
@@ -147,6 +151,66 @@ wait_port 127.0.0.1 "$port" 15
 out="$("$rust_echo_client" "$url" "Hello")"
 echo "$out" | grep -q "reply: Hello"
 echo "ok: rust server -> rust client"
+
+stop_pids
+
+echo "case: rust server -> node client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+"$rust_echo_server" "$url" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$($node_echo_client "$url" "Hello")"
+echo "$out" | grep -q "reply: Hello"
+echo "ok: rust server -> node client"
+
+stop_pids
+
+echo "case: node server -> rust client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+$node_echo_server "$url" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$("$rust_echo_client" "$url" "Hello")"
+echo "$out" | grep -q "reply: Hello"
+echo "ok: node server -> rust client"
+
+stop_pids
+
+echo "case: go server -> node client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+"$tmp_dir/go_serve" --listen "$url" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$($node_echo_client "$url" "Hello")"
+echo "$out" | grep -q "reply: Hello"
+echo "ok: go server -> node client"
+
+stop_pids
+
+echo "case: node server -> go client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+$node_echo_server "$url" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$("$tmp_dir/go_call" --connect "$url" --msg "Hello")"
+echo "$out" | grep -q "reply: Hello"
+echo "ok: node server -> go client"
+
+stop_pids
+
+echo "case: node server -> node client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+$node_echo_server "$url" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$($node_echo_client "$url" "Hello")"
+echo "$out" | grep -q "reply: Hello"
+echo "ok: node server -> node client"
 
 stop_pids
 
