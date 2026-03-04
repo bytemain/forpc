@@ -105,7 +105,7 @@ mod tests {
     }
 }
 
-include!(concat!(env!("OUT_DIR"), "/forpc.rs"));
+include!("../gen/forpc.rs");
 
 impl Call {
     pub fn new(method: impl Into<String>) -> Self {
