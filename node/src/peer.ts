@@ -212,11 +212,12 @@ export class Peer {
             }
           }
         }
-      } catch {
+      } catch (err) {
         if (!this.closed) {
+          const detail = err instanceof Error ? err.message : String(err)
           // Reject all pending calls on transport error
           for (const [streamId, pending] of this.pendingCalls) {
-            pending.reject(new RpcError(StatusCode.UNAVAILABLE, 'Transport error'))
+            pending.reject(new RpcError(StatusCode.UNAVAILABLE, `Transport error: ${detail}`))
             this.pendingCalls.delete(streamId)
           }
         }
@@ -228,7 +229,7 @@ export class Peer {
         }
       }
     }
-    loop()
+    loop().catch(() => {})
   }
 
   /**
