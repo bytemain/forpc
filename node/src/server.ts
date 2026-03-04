@@ -3,6 +3,11 @@
  *
  * Listens for incoming RPC calls and dispatches them to registered handlers.
  * Uses AsyncRouter for the underlying transport.
+ *
+ * Supports two handler registration modes:
+ * - **register**: Low-level raw byte handlers (full control)
+ * - **registerUnary**: Typed protobuf handlers with auto serialization (like gRPC/bRPC)
+ * - **addService**: Register all methods of a service definition at once (gRPC-style)
  */
 
 import { AsyncRouter, RouterMessage } from '../transport/index.js'
@@ -18,7 +23,37 @@ import {
   decodeCall,
 } from './protocol.ts'
 
+import type { MessageType, ServiceDefinition } from './peer.ts'
+
 export type RawHandler = (payload: Buffer, metadata: Record<string, string>) => Buffer | Promise<Buffer>
+
+/**
+ * Typed unary handler for protobuf-based services.
+ *
+ * Receives a decoded request object and returns a response object,
+ * following the same pattern as Rust's `register_unary` and gRPC service handlers.
+ */
+export type UnaryHandler<Req = object, Resp = object> = (
+  request: Req,
+  metadata: Record<string, string>,
+) => Resp | Promise<Resp>
+
+/**
+ * Service implementation mapping method names to handler functions.
+ *
+ * Used with `addService` for gRPC-style service registration.
+ *
+ * @example
+ * ```ts
+ * const impl: ServiceImplementation = {
+ *   Echo: (req, metadata) => ({ result: req.data }),
+ * }
+ * server.addService('MyService', serviceDefinition, impl)
+ * ```
+ */
+export interface ServiceImplementation {
+  [methodName: string]: UnaryHandler
+}
 
 interface StreamState {
   method: string
@@ -29,6 +64,24 @@ interface StreamState {
 
 /**
  * RawServer - Listens for RPC calls and dispatches to handlers
+ *
+ * @example
+ * ```ts
+ * // Raw handler registration
+ * const server = await RawServer.bind(url)
+ * server.register('Echo/Ping', (payload) => payload)
+ * server.serve()
+ *
+ * // Typed protobuf handler
+ * server.registerUnary('Test/Echo', EchoRequest, EchoResponse, (req) => {
+ *   return { result: req.data }
+ * })
+ *
+ * // gRPC-style service registration
+ * server.addService('Test', serviceDefinition, {
+ *   Echo: (req) => ({ result: req.data }),
+ * })
+ * ```
  */
 export class RawServer {
   private router: AsyncRouter
@@ -65,10 +118,78 @@ export class RawServer {
   }
 
   /**
-   * Register a handler for a method
+   * Register a raw handler for a method
    */
   register(method: string, handler: RawHandler): void {
     this.handlers.set(method, handler)
+  }
+
+  /**
+   * Register a typed unary handler with automatic protobuf serialization.
+   *
+   * Mirrors Rust's `register_unary<Req, Resp>()` — the handler receives
+   * a decoded request and returns a response object that is automatically
+   * serialized back to protobuf bytes.
+   *
+   * @param method - Full RPC method name (e.g. "Service/Method")
+   * @param requestType - Protobuf message type for decoding the request
+   * @param responseType - Protobuf message type for encoding the response
+   * @param handler - Handler function receiving decoded request, returning response
+   *
+   * @example
+   * ```ts
+   * server.registerUnary('Test/Echo', EchoRequest, EchoResponse, (req) => {
+   *   return { result: req.data }
+   * })
+   * ```
+   */
+  registerUnary<Req extends object, Resp extends object>(
+    method: string,
+    requestType: MessageType<Req>,
+    responseType: MessageType<Resp>,
+    handler: UnaryHandler<Req, Resp>,
+  ): void {
+    this.handlers.set(method, async (payload: Buffer, metadata: Record<string, string>) => {
+      const request = requestType.decode(payload)
+      const response = await handler(request, metadata)
+      const respMsg = responseType.create(response)
+      return Buffer.from(responseType.encode(respMsg).finish())
+    })
+  }
+
+  /**
+   * Register all methods of a service at once (gRPC-style).
+   *
+   * Each method in the service definition is registered with the corresponding
+   * handler from the implementation object. Method names are prefixed with
+   * `serviceName/` (e.g. "MyService/Echo").
+   *
+   * @param serviceName - Service name prefix (e.g. "MyService")
+   * @param definition - Service definition mapping method names to protobuf types
+   * @param implementation - Handler implementations for each method
+   *
+   * @example
+   * ```ts
+   * const echoServiceDef: ServiceDefinition = {
+   *   Echo: { requestType: EchoRequest, responseType: EchoResponse },
+   * }
+   *
+   * server.addService('Test', echoServiceDef, {
+   *   Echo: (req) => ({ result: req.data }),
+   * })
+   * ```
+   */
+  addService(
+    serviceName: string,
+    definition: ServiceDefinition,
+    implementation: ServiceImplementation,
+  ): void {
+    for (const methodName of Object.keys(definition)) {
+      const handler = implementation[methodName]
+      if (!handler) continue
+      const { requestType, responseType } = definition[methodName]
+      this.registerUnary(`${serviceName}/${methodName}`, requestType, responseType, handler)
+    }
   }
 
   /**

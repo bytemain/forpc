@@ -5,6 +5,10 @@
  * RPC protocol (Packet framing + protobuf Call/Status messages).
  *
  * Enables Node.js to invoke RPC methods on Rust/Go servers and vice versa.
+ *
+ * Provides both raw byte calls (callRaw) and typed protobuf calls (call),
+ * following the same API patterns as Rust and Go implementations
+ * (similar to gRPC/bRPC calling conventions).
  */
 
 import { AsyncDealer } from '../transport/index.js'
@@ -33,10 +37,60 @@ export class RpcError extends Error {
 }
 
 /**
+ * Protobuf message type interface.
+ *
+ * Compatible with protobufjs generated message classes
+ * (e.g. `root.lookupType('package.MessageName')`).
+ */
+export interface MessageType<T = object> {
+  encode(message: T): { finish(): Uint8Array }
+  decode(buf: Uint8Array): T
+  create(properties?: Partial<T>): T
+}
+
+/**
+ * Service definition for gRPC-style typed calls.
+ *
+ * Maps method names to their request/response protobuf message types,
+ * following the same pattern as gRPC service definitions.
+ *
+ * @example
+ * ```ts
+ * const echoService: ServiceDefinition = {
+ *   Echo: {
+ *     requestType: EchoRequest,
+ *     responseType: EchoResponse,
+ *   },
+ * }
+ * ```
+ */
+export interface ServiceDefinition {
+  [methodName: string]: {
+    requestType: MessageType
+    responseType: MessageType
+  }
+}
+
+/**
  * Peer - Client-side RPC peer
  *
  * Connects to a remote RPC server and can invoke unary calls.
  * Uses AsyncDealer for the underlying transport.
+ *
+ * Supports two calling modes:
+ * - **callRaw**: Low-level raw byte calls (compatible with any payload format)
+ * - **call**: Typed protobuf calls with automatic serialization (like gRPC/bRPC)
+ *
+ * @example
+ * ```ts
+ * const peer = await Peer.connect('tcp://127.0.0.1:24000')
+ *
+ * // Raw call
+ * const resp = await peer.callRaw('Echo/Ping', Buffer.from('hello'))
+ *
+ * // Typed protobuf call
+ * const reply = await peer.call('Echo/Ping', EchoRequest, EchoResponse, { data: 'hello' })
+ * ```
  */
 export class Peer {
   private dealer: AsyncDealer
@@ -107,5 +161,56 @@ export class Peer {
         }
       }
     }
+  }
+
+  /**
+   * Make a raw unary RPC call with explicit metadata.
+   *
+   * Convenience alias matching the Rust/Go `call_raw_with_metadata` / `CallRawWithMetadata` API.
+   */
+  async callRawWithMetadata(
+    method: string,
+    payload: Buffer,
+    metadata: Record<string, string>,
+  ): Promise<Buffer> {
+    return this.callRaw(method, payload, metadata)
+  }
+
+  /**
+   * Make a typed unary RPC call with automatic protobuf serialization.
+   *
+   * Encodes the request using `requestType`, sends it, and decodes
+   * the response using `responseType` — matching the Rust `call<Req, Resp>()`
+   * and Go `Call(method, req, resp)` patterns.
+   *
+   * @param method - RPC method name (e.g. "Service/Method")
+   * @param requestType - Protobuf message type for the request
+   * @param responseType - Protobuf message type for the response
+   * @param request - Request payload object (will be encoded via requestType)
+   * @param metadata - Optional per-call metadata key-value pairs
+   * @returns Decoded response object
+   *
+   * @example
+   * ```ts
+   * const resp = await peer.call(
+   *   'Test/Echo',
+   *   EchoRequest,
+   *   EchoResponse,
+   *   { data: 'hello' },
+   * )
+   * console.log(resp.result) // 'hello'
+   * ```
+   */
+  async call<Req extends object, Resp extends object>(
+    method: string,
+    requestType: MessageType<Req>,
+    responseType: MessageType<Resp>,
+    request: Partial<Req>,
+    metadata?: Record<string, string>,
+  ): Promise<Resp> {
+    const reqMsg = requestType.create(request)
+    const payload = Buffer.from(requestType.encode(reqMsg).finish())
+    const respBuf = await this.callRaw(method, payload, metadata)
+    return responseType.decode(respBuf)
   }
 }

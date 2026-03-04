@@ -54,3 +54,8 @@ module.exports.RpcError = RpcError
 
 const { RawServer } = require('./src/server')
 module.exports.RawServer = RawServer
+
+// Re-export convenience function for creating service definitions
+module.exports.defineService = function defineService(definition) {
+  return definition
+}
