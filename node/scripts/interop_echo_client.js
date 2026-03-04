@@ -11,9 +11,7 @@ const msg = process.argv[3] || 'Hello'
   const EchoResponse = root.lookupType('forpc.test.EchoResponse')
 
   const p = await Peer.connect(url)
-  const reqBuf = Buffer.from(EchoRequest.encode(EchoRequest.create({ data: msg })).finish())
-  const respBuf = await p.callRaw('Test/Echo', reqBuf)
-  const resp = EchoResponse.decode(respBuf)
+  const resp = await p.call('Test/Echo', EchoRequest, EchoResponse, { data: msg })
   process.stdout.write(`reply: ${resp.result}\n`)
 })().catch((e) => {
   console.error(e)
