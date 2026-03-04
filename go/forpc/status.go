@@ -1,23 +1,21 @@
 package forpc
 
-import "github.com/bytemain/forpc/go/forpc/pb"
-
 const (
-	StatusOK                 uint32 = uint32(pb.StatusCode_OK)
-	StatusCancelled          uint32 = uint32(pb.StatusCode_CANCELLED)
-	StatusUnknown            uint32 = uint32(pb.StatusCode_UNKNOWN)
-	StatusInvalidArgument    uint32 = uint32(pb.StatusCode_INVALID_ARGUMENT)
-	StatusDeadlineExceeded   uint32 = uint32(pb.StatusCode_DEADLINE_EXCEEDED)
-	StatusNotFound           uint32 = uint32(pb.StatusCode_NOT_FOUND)
-	StatusAlreadyExists      uint32 = uint32(pb.StatusCode_ALREADY_EXISTS)
-	StatusPermissionDenied   uint32 = uint32(pb.StatusCode_PERMISSION_DENIED)
-	StatusResourceExhausted  uint32 = uint32(pb.StatusCode_RESOURCE_EXHAUSTED)
-	StatusFailedPrecondition uint32 = uint32(pb.StatusCode_FAILED_PRECONDITION)
-	StatusAborted            uint32 = uint32(pb.StatusCode_ABORTED)
-	StatusOutOfRange         uint32 = uint32(pb.StatusCode_OUT_OF_RANGE)
-	StatusUnimplemented      uint32 = uint32(pb.StatusCode_UNIMPLEMENTED)
-	StatusInternal           uint32 = uint32(pb.StatusCode_INTERNAL)
-	StatusUnavailable        uint32 = uint32(pb.StatusCode_UNAVAILABLE)
-	StatusDataLoss           uint32 = uint32(pb.StatusCode_DATA_LOSS)
-	StatusUnauthenticated    uint32 = uint32(pb.StatusCode_UNAUTHENTICATED)
+	StatusOK                 uint32 = 0
+	StatusCancelled          uint32 = 1
+	StatusUnknown            uint32 = 2
+	StatusInvalidArgument    uint32 = 3
+	StatusDeadlineExceeded   uint32 = 4
+	StatusNotFound           uint32 = 5
+	StatusAlreadyExists      uint32 = 6
+	StatusPermissionDenied   uint32 = 7
+	StatusResourceExhausted  uint32 = 8
+	StatusFailedPrecondition uint32 = 9
+	StatusAborted            uint32 = 10
+	StatusOutOfRange         uint32 = 11
+	StatusUnimplemented      uint32 = 12
+	StatusInternal           uint32 = 13
+	StatusUnavailable        uint32 = 14
+	StatusDataLoss           uint32 = 15
+	StatusUnauthenticated    uint32 = 16
 )
