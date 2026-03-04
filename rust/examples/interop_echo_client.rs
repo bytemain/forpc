@@ -1,18 +1,7 @@
 use std::env;
 
 use forpc::RpcPeer;
-
-#[derive(prost::Message, Clone)]
-struct EchoRequest {
-    #[prost(string, tag = "1")]
-    data: String,
-}
-
-#[derive(prost::Message, Clone)]
-struct EchoResponse {
-    #[prost(string, tag = "1")]
-    result: String,
-}
+use forpc::pb::test::{EchoRequest, EchoResponse};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

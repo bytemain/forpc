@@ -1,5 +1,6 @@
 pub mod transport;
 pub mod rpc;
+pub mod pb;
 
 pub use rpc::peer::{RpcPeer, Request, Response};
 pub use rpc::listener::RpcListener;
@@ -16,17 +17,7 @@ mod tests {
     use std::time::Duration;
     use tokio::time::sleep;
 
-    #[derive(prost::Message, Clone, PartialEq)]
-    struct TestRequest {
-        #[prost(string, tag = "1")]
-        data: String,
-    }
-
-    #[derive(prost::Message, Clone, PartialEq)]
-    struct TestResponse {
-        #[prost(string, tag = "1")]
-        result: String,
-    }
+    use crate::pb::test::{TestRequest, TestResponse};
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_bidi_call() -> Result<(), BoxError> {

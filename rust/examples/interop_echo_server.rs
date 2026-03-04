@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use bytes::Bytes;
 use forpc::RpcPeer;
 use forpc::transport::nng::{AsyncRouter, InboundFrame, ServerTransport};
+use forpc::pb::test::{EchoRequest, EchoResponse};
 use tokio::sync::{mpsc, Mutex};
 use std::collections::HashMap;
 
@@ -18,18 +19,6 @@ fn hex_prefix(data: &[u8], limit: usize) -> String {
         s.push_str(&format!("{:02x}", b));
     }
     s
-}
-
-#[derive(prost::Message, Clone)]
-struct EchoRequest {
-    #[prost(string, tag = "1")]
-    data: String,
-}
-
-#[derive(prost::Message, Clone)]
-struct EchoResponse {
-    #[prost(string, tag = "1")]
-    result: String,
 }
 
 #[tokio::main]
