@@ -75,6 +75,17 @@ cd rust
 cargo run --example interop_raw_echo_client -- tcp://127.0.0.1:24002 Raw/Echo HelloNode
 ```
 
+## 重新生成 Protobuf 代码
+
+生成的 Rust protobuf 代码已预先提交在 `rust/src/gen/` 目录中，正常构建不需要 `protoc`。当 `.proto` 文件变更后，运行以下命令重新生成：
+
+```bash
+cd rust
+FORPC_GENERATE_PROTO=1 cargo build
+```
+
+需要安装 `protoc`，详见 [protobuf 安装说明](https://github.com/protocolbuffers/protobuf#protobuf-compiler-installation)。
+
 ## 备注
 
 - 当前实现以“可互通/可扩展”为优先，仍在快速迭代中；协议细节以 `docs/TECHNICAL_SPECIFICATION_CN.md` 为准。

@@ -78,6 +78,17 @@ cd rust
 cargo run --example interop_raw_echo_client -- tcp://127.0.0.1:24002 Raw/Echo HelloNode
 ```
 
+## Regenerating Protobuf Code
+
+The generated protobuf Rust code is pre-committed in `rust/src/gen/`. Normal builds do not require `protoc`. To regenerate after `.proto` file changes:
+
+```bash
+cd rust
+FORPC_GENERATE_PROTO=1 cargo build
+```
+
+This requires `protoc` to be installed. See [protobuf install instructions](https://github.com/protocolbuffers/protobuf#protobuf-compiler-installation).
+
 ## Notes
 
 - The current implementation prioritizes "interoperability/extensibility" and is still under rapid iteration; refer to `docs/TECHNICAL_SPECIFICATION_CN.md` for protocol details.
