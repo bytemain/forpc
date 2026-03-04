@@ -67,7 +67,7 @@ func (s *BidiStream[Req, Resp]) CloseSend() error {
 	}
 	s.closed = true
 	s.mu.Unlock()
-	st := &pb.Status{Code: StatusOK, Message: "OK"}
+	st := &pb.Status{Code: uint32(pb.StatusCode_OK), Message: "OK"}
 	payload, err := proto.Marshal(st)
 	if err != nil {
 		return err

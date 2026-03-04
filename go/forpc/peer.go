@@ -164,7 +164,7 @@ func (p *RpcPeer) unaryRawWithMetadata(method string, meta map[string]string, pa
 		return nil, err
 	}
 
-	eos := &pb.Status{Code: StatusOK, Message: "OK"}
+	eos := &pb.Status{Code: uint32(pb.StatusCode_OK), Message: "OK"}
 	trPayload, err := proto.Marshal(eos)
 	if err != nil {
 		return nil, err
@@ -251,7 +251,7 @@ func (p *RpcPeer) handleInbound(pkt Packet) error {
 		h := p.handlers[call.Method]
 		p.handlersMu.RUnlock()
 		if h == nil {
-			_ = p.sendResponse(pkt.StreamID, ResponseError(StatusUnimplemented, "method not found"))
+			_ = p.sendResponse(pkt.StreamID, ResponseError(uint32(pb.StatusCode_UNIMPLEMENTED), "method not found"))
 			return nil
 		}
 		rx := make(chan Packet, 32)
