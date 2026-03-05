@@ -6,7 +6,7 @@ pub use rpc::peer::{RpcPeer, Request, Response};
 pub use rpc::listener::RpcListener;
 pub use rpc::protocol::{Call, Status};
 pub use rpc::error::{RpcError, RpcResult};
-pub use rpc::status::StatusCode;
+pub use rpc::protocol::StatusCode;
 pub use rpc::stream::BidiStream;
 
 pub type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;

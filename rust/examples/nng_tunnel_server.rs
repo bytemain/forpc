@@ -42,16 +42,16 @@ fn resp_ok() -> Response {
 
 async fn tunnel_tcp(req: Request, peer: Arc<RpcPeer>) -> Response {
     let Some(mut rx) = req.stream else {
-        return Response::error_with_code(StatusCode::INVALID_ARGUMENT, "missing stream");
+        return Response::error_with_code(StatusCode::InvalidArgument as i32, "missing stream");
     };
     let dst = match req.metadata.get("dst") {
         Some(v) if !v.is_empty() => v.clone(),
-        _ => return Response::error_with_code(StatusCode::INVALID_ARGUMENT, "missing dst"),
+        _ => return Response::error_with_code(StatusCode::InvalidArgument as i32, "missing dst"),
     };
 
     let socket = match tokio::net::TcpStream::connect(dst).await {
         Ok(s) => s,
-        Err(e) => return Response::error_with_code(StatusCode::UNAVAILABLE, e.to_string()),
+        Err(e) => return Response::error_with_code(StatusCode::Unavailable as i32, e.to_string()),
     };
 
     let (mut r, mut w) = socket.into_split();
@@ -65,7 +65,7 @@ async fn tunnel_tcp(req: Request, peer: Arc<RpcPeer>) -> Response {
                     let chunk: TcpChunk = peer_in.user_deserialize(&pkt.payload).await?;
                     if !chunk.data.is_empty() {
                         w.write_all(&chunk.data).await.map_err(|e| {
-                            forpc::RpcError::new(StatusCode::UNAVAILABLE, e.to_string())
+                            forpc::RpcError::new(StatusCode::Unavailable as i32, e.to_string())
                         })?;
                     }
                 }
@@ -84,7 +84,7 @@ async fn tunnel_tcp(req: Request, peer: Arc<RpcPeer>) -> Response {
         let mut buf = [0u8; 16 * 1024];
         loop {
             let n = r.read(&mut buf).await.map_err(|e| {
-                forpc::RpcError::new(StatusCode::UNAVAILABLE, e.to_string())
+                forpc::RpcError::new(StatusCode::Unavailable as i32, e.to_string())
             })?;
             if n == 0 {
                 break;
@@ -107,6 +107,6 @@ async fn tunnel_tcp(req: Request, peer: Arc<RpcPeer>) -> Response {
     match r {
         Ok(Ok(())) => resp_ok(),
         Ok(Err(e)) => Response::error_with_code(e.code, e.message),
-        Err(e) => Response::error_with_code(StatusCode::INTERNAL, e.to_string()),
+        Err(e) => Response::error_with_code(StatusCode::Internal as i32, e.to_string()),
     }
 }

@@ -4,8 +4,8 @@ use bytes::Bytes;
 use std::collections::HashMap;
 use crate::transport::nng::{AsyncRouter, InboundFrame, ServerTransport};
 use super::peer::RpcPeer;
+use super::protocol::StatusCode;
 use super::error::{RpcError, RpcResult};
-use super::status::StatusCode;
 
 pub struct RpcListener {
     accept_rx: Mutex<mpsc::Receiver<Arc<RpcPeer>>>,
@@ -15,7 +15,7 @@ impl RpcListener {
     pub async fn bind(url: &str) -> RpcResult<Self> {
         let router = AsyncRouter::listen(url)
             .await
-            .map_err(|e| RpcError::new(StatusCode::UNAVAILABLE, e.to_string()))?;
+            .map_err(|e| RpcError::new(StatusCode::Unavailable as i32, e.to_string()))?;
 
         let (accept_tx, accept_rx) = mpsc::channel(100);
         let peers: Arc<Mutex<HashMap<Vec<u8>, mpsc::Sender<InboundFrame>>>> =
@@ -68,6 +68,6 @@ impl RpcListener {
         let mut rx = self.accept_rx.lock().await;
         rx.recv()
             .await
-            .ok_or_else(|| RpcError::new(StatusCode::UNAVAILABLE, "Listener closed"))
+            .ok_or_else(|| RpcError::new(StatusCode::Unavailable as i32, "Listener closed"))
     }
 }
