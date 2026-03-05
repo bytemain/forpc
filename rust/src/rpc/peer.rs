@@ -186,7 +186,10 @@ impl RpcPeer {
                     Ok(response) => {
                         Response::ok(Bytes::from(response.encode_to_vec()))
                     }
-                    Err(e) => Response::error(Status { code: e.code, message: e.message }),
+                    Err(e) => {
+                        let code = StatusCode::try_from(e.code).unwrap_or(StatusCode::Unknown);
+                        Response::error_with_code(code, e.message)
+                    }
                 }
             }
         }).await;

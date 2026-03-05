@@ -106,7 +106,10 @@ async fn tunnel_tcp(req: Request, peer: Arc<RpcPeer>) -> Response {
 
     match r {
         Ok(Ok(())) => resp_ok(),
-        Ok(Err(e)) => Response::error(forpc::Status { code: e.code, message: e.message }),
+        Ok(Err(e)) => {
+            let code = StatusCode::try_from(e.code).unwrap_or(StatusCode::Unknown);
+            Response::error_with_code(code, e.message)
+        }
         Err(e) => Response::error_with_code(StatusCode::Internal, e.to_string()),
     }
 }
