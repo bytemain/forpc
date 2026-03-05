@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"github.com/bytemain/forpc/go/forpc"
+	"github.com/bytemain/forpc/go/forpc/pb"
 )
 
 func main() {
@@ -36,7 +37,7 @@ func main() {
 			}
 		}
 		if len(payload) == 0 {
-			return forpc.ResponseError(forpc.StatusInvalidArgument, "Missing payload")
+			return forpc.ResponseError(pb.StatusCode_INVALID_ARGUMENT, "Missing payload")
 		}
 		return forpc.ResponseOK(payload)
 	})

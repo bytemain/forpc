@@ -2,9 +2,8 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use prost::Message;
 use super::peer::RpcPeer;
-use super::protocol::{Packet, Status, frame_kind};
+use super::protocol::{Packet, Status, StatusCode, frame_kind};
 use super::error::{RpcError, RpcResult};
-use super::status::StatusCode;
 
 pub struct BidiStream<Req, Resp> {
     pub(crate) stream_id: u32,
@@ -29,7 +28,7 @@ impl<Req: Message + Send + Sync + 'static, Resp: Message + Default + Send + Sync
                     }
                     frame_kind::TRAILERS => {
                         let status: Status = Status::decode(packet.payload.as_ref())
-                             .map_err(|e| RpcError::new(StatusCode::INTERNAL, e.to_string()))?;
+                             .map_err(|e| RpcError::new(StatusCode::Internal, e.to_string()))?;
                         
                         if status.is_ok() {
                             Ok(None)

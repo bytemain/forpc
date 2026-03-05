@@ -1,19 +1,18 @@
 use std::fmt;
-use super::status::StatusCode;
-use super::protocol::Status;
+use super::protocol::{Status, StatusCode};
 use crate::BoxError;
 
 #[derive(Debug)]
 pub struct RpcError {
-    pub code: u32,
+    pub code: i32,
     pub message: String,
     pub source: Option<BoxError>,
 }
 
 impl RpcError {
-    pub fn new(code: u32, message: impl Into<String>) -> Self {
+    pub fn new(code: StatusCode, message: impl Into<String>) -> Self {
         Self {
-            code,
+            code: code as i32,
             message: message.into(),
             source: None,
         }
@@ -34,19 +33,21 @@ impl RpcError {
     
     pub fn is_retryable(&self) -> bool {
         matches!(
-            self.code,
-            StatusCode::UNAVAILABLE | StatusCode::RESOURCE_EXHAUSTED | StatusCode::ABORTED
+            StatusCode::try_from(self.code),
+            Ok(StatusCode::Unavailable | StatusCode::ResourceExhausted | StatusCode::Aborted)
         )
     }
 }
 
 impl fmt::Display for RpcError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let desc = StatusCode::try_from(self.code)
+            .map_or("UNKNOWN_STATUS_CODE", |c| c.as_str_name());
         write!(
             f,
             "RpcError {{ code: {} ({}), message: \"{}\" }}",
             self.code,
-            StatusCode::description(self.code),
+            desc,
             self.message
         )
     }

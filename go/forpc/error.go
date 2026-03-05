@@ -1,9 +1,13 @@
 package forpc
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/bytemain/forpc/go/forpc/pb"
+)
 
 type RpcError struct {
-	Code    uint32
+	Code    pb.StatusCode
 	Message string
 }
 
@@ -11,6 +15,6 @@ func (e *RpcError) Error() string {
 	return fmt.Sprintf("RpcError{code=%d,message=%q}", e.Code, e.Message)
 }
 
-func NewRpcError(code uint32, message string) *RpcError {
+func NewRpcError(code pb.StatusCode, message string) *RpcError {
 	return &RpcError{Code: code, Message: message}
 }

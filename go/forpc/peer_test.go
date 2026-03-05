@@ -82,11 +82,11 @@ func TestBidiStreamInproc(t *testing.T) {
 				}
 				var msg pb.ChatMessage
 				if err := proto.Unmarshal(pkt.Payload, &msg); err != nil {
-					return ResponseError(StatusInvalidArgument, err.Error())
+					return ResponseError(pb.StatusCode_INVALID_ARGUMENT, err.Error())
 				}
 				out, err := proto.Marshal(&pb.ChatMessage{Text: "Echo: " + msg.Text})
 				if err != nil {
-					return ResponseError(StatusInternal, err.Error())
+					return ResponseError(pb.StatusCode_INTERNAL, err.Error())
 				}
 				_ = peer.sendPacket(Packet{StreamID: r.StreamID, Kind: FrameData, Payload: out})
 			}

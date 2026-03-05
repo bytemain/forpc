@@ -3,6 +3,8 @@ package forpc
 import (
 	"encoding/binary"
 	"errors"
+
+	"github.com/bytemain/forpc/go/forpc/pb"
 )
 
 const (
@@ -42,14 +44,14 @@ type Call struct {
 }
 
 type Status struct {
-	Code    uint32
+	Code    pb.StatusCode
 	Message string
 }
 
 func StatusOKValue() Status {
-	return Status{Code: StatusOK, Message: "OK"}
+	return Status{Code: pb.StatusCode_OK, Message: "OK"}
 }
 
 func (s Status) IsOK() bool {
-	return s.Code == StatusOK
+	return s.Code == pb.StatusCode_OK
 }

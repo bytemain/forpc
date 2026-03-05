@@ -1,7 +1,7 @@
 use prost::Message;
 use std::collections::HashMap;
 use bytes::{Bytes, BytesMut, Buf, BufMut};
-use super::status::StatusCode;
+
 use std::fmt;
 
 pub mod frame_kind {
@@ -126,19 +126,19 @@ impl Call {
 }
 
 impl Status {
-    pub fn new(code: u32, message: impl Into<String>) -> Self {
-        Self { code, message: message.into() }
+    pub fn new(code: StatusCode, message: impl Into<String>) -> Self {
+        Self { code: code as i32, message: message.into() }
     }
     
     pub fn ok() -> Self {
-        Self { code: StatusCode::OK, message: "OK".into() }
+        Self::new(StatusCode::Ok, "OK")
     }
     
     pub fn internal(message: impl Into<String>) -> Self {
-        Self { code: StatusCode::INTERNAL, message: message.into() }
+        Self::new(StatusCode::Internal, message)
     }
     
     pub fn is_ok(&self) -> bool {
-        self.code == StatusCode::OK
+        self.code == StatusCode::Ok as i32
     }
 }
