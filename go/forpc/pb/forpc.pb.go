@@ -166,7 +166,7 @@ func (x *Call) GetMetadata() map[string]string {
 
 type Status struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Code          uint32                 `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
+	Code          StatusCode             `protobuf:"varint,1,opt,name=code,proto3,enum=forpc.StatusCode" json:"code,omitempty"`
 	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -202,11 +202,11 @@ func (*Status) Descriptor() ([]byte, []int) {
 	return file_forpc_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Status) GetCode() uint32 {
+func (x *Status) GetCode() StatusCode {
 	if x != nil {
 		return x.Code
 	}
-	return 0
+	return StatusCode_OK
 }
 
 func (x *Status) GetMessage() string {
@@ -226,9 +226,9 @@ const file_forpc_proto_rawDesc = "" +
 	"\bmetadata\x18\x02 \x03(\v2\x19.forpc.Call.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"6\n" +
-	"\x06Status\x12\x12\n" +
-	"\x04code\x18\x01 \x01(\rR\x04code\x12\x18\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"I\n" +
+	"\x06Status\x12%\n" +
+	"\x04code\x18\x01 \x01(\x0e2\x11.forpc.StatusCodeR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage*\xbd\x02\n" +
 	"\n" +
 	"StatusCode\x12\x06\n" +
@@ -273,11 +273,12 @@ var file_forpc_proto_goTypes = []any{
 }
 var file_forpc_proto_depIdxs = []int32{
 	3, // 0: forpc.Call.metadata:type_name -> forpc.Call.MetadataEntry
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	0, // 1: forpc.Status.code:type_name -> forpc.StatusCode
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_forpc_proto_init() }

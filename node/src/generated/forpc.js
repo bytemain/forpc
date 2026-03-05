@@ -332,7 +332,7 @@ $root.forpc = (function() {
          * Properties of a Status.
          * @memberof forpc
          * @interface IStatus
-         * @property {number|null} [code] Status code
+         * @property {forpc.StatusCode|null} [code] Status code
          * @property {string|null} [message] Status message
          */
 
@@ -353,7 +353,7 @@ $root.forpc = (function() {
 
         /**
          * Status code.
-         * @member {number} code
+         * @member {forpc.StatusCode} code
          * @memberof forpc.Status
          * @instance
          */
@@ -392,7 +392,7 @@ $root.forpc = (function() {
             if (!writer)
                 writer = $Writer.create();
             if (message.code != null && Object.hasOwnProperty.call(message, "code"))
-                writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.code);
+                writer.uint32(/* id 1, wireType 0 =*/8).int32(message.code);
             if (message.message != null && Object.hasOwnProperty.call(message, "message"))
                 writer.uint32(/* id 2, wireType 2 =*/18).string(message.message);
             return writer;
@@ -432,7 +432,7 @@ $root.forpc = (function() {
                     break;
                 switch (tag >>> 3) {
                 case 1: {
-                        message.code = reader.uint32();
+                        message.code = reader.int32();
                         break;
                     }
                 case 2: {
@@ -475,8 +475,28 @@ $root.forpc = (function() {
             if (typeof message !== "object" || message === null)
                 return "object expected";
             if (message.code != null && message.hasOwnProperty("code"))
-                if (!$util.isInteger(message.code))
-                    return "code: integer expected";
+                switch (message.code) {
+                default:
+                    return "code: enum value expected";
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                case 4:
+                case 5:
+                case 6:
+                case 7:
+                case 8:
+                case 9:
+                case 10:
+                case 11:
+                case 12:
+                case 13:
+                case 14:
+                case 15:
+                case 16:
+                    break;
+                }
             if (message.message != null && message.hasOwnProperty("message"))
                 if (!$util.isString(message.message))
                     return "message: string expected";
@@ -495,8 +515,82 @@ $root.forpc = (function() {
             if (object instanceof $root.forpc.Status)
                 return object;
             var message = new $root.forpc.Status();
-            if (object.code != null)
-                message.code = object.code >>> 0;
+            switch (object.code) {
+            default:
+                if (typeof object.code === "number") {
+                    message.code = object.code;
+                    break;
+                }
+                break;
+            case "OK":
+            case 0:
+                message.code = 0;
+                break;
+            case "CANCELLED":
+            case 1:
+                message.code = 1;
+                break;
+            case "UNKNOWN":
+            case 2:
+                message.code = 2;
+                break;
+            case "INVALID_ARGUMENT":
+            case 3:
+                message.code = 3;
+                break;
+            case "DEADLINE_EXCEEDED":
+            case 4:
+                message.code = 4;
+                break;
+            case "NOT_FOUND":
+            case 5:
+                message.code = 5;
+                break;
+            case "ALREADY_EXISTS":
+            case 6:
+                message.code = 6;
+                break;
+            case "PERMISSION_DENIED":
+            case 7:
+                message.code = 7;
+                break;
+            case "RESOURCE_EXHAUSTED":
+            case 8:
+                message.code = 8;
+                break;
+            case "FAILED_PRECONDITION":
+            case 9:
+                message.code = 9;
+                break;
+            case "ABORTED":
+            case 10:
+                message.code = 10;
+                break;
+            case "OUT_OF_RANGE":
+            case 11:
+                message.code = 11;
+                break;
+            case "UNIMPLEMENTED":
+            case 12:
+                message.code = 12;
+                break;
+            case "INTERNAL":
+            case 13:
+                message.code = 13;
+                break;
+            case "UNAVAILABLE":
+            case 14:
+                message.code = 14;
+                break;
+            case "DATA_LOSS":
+            case 15:
+                message.code = 15;
+                break;
+            case "UNAUTHENTICATED":
+            case 16:
+                message.code = 16;
+                break;
+            }
             if (object.message != null)
                 message.message = String(object.message);
             return message;
@@ -516,11 +610,11 @@ $root.forpc = (function() {
                 options = {};
             var object = {};
             if (options.defaults) {
-                object.code = 0;
+                object.code = options.enums === String ? "OK" : 0;
                 object.message = "";
             }
             if (message.code != null && message.hasOwnProperty("code"))
-                object.code = message.code;
+                object.code = options.enums === String ? $root.forpc.StatusCode[message.code] === undefined ? message.code : $root.forpc.StatusCode[message.code] : message.code;
             if (message.message != null && message.hasOwnProperty("message"))
                 object.message = message.message;
             return object;

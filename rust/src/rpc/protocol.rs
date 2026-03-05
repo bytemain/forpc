@@ -126,19 +126,19 @@ impl Call {
 }
 
 impl Status {
-    pub fn new(code: u32, message: impl Into<String>) -> Self {
+    pub fn new(code: i32, message: impl Into<String>) -> Self {
         Self { code, message: message.into() }
     }
     
     pub fn ok() -> Self {
-        Self { code: StatusCode::Ok as u32, message: "OK".into() }
+        Self { code: StatusCode::Ok as i32, message: "OK".into() }
     }
     
     pub fn internal(message: impl Into<String>) -> Self {
-        Self { code: StatusCode::Internal as u32, message: message.into() }
+        Self { code: StatusCode::Internal as i32, message: message.into() }
     }
     
     pub fn is_ok(&self) -> bool {
-        self.code == StatusCode::Ok as u32
+        self.code == StatusCode::Ok as i32
     }
 }

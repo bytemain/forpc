@@ -44,14 +44,14 @@ type Call struct {
 }
 
 type Status struct {
-	Code    uint32
+	Code    pb.StatusCode
 	Message string
 }
 
 func StatusOKValue() Status {
-	return Status{Code: uint32(pb.StatusCode_OK), Message: "OK"}
+	return Status{Code: pb.StatusCode_OK, Message: "OK"}
 }
 
 func (s Status) IsOK() bool {
-	return s.Code == uint32(pb.StatusCode_OK)
+	return s.Code == pb.StatusCode_OK
 }

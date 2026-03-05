@@ -30,6 +30,6 @@ message Call {
 }
 
 message Status {
-  uint32 code = 1;
+  StatusCode code = 1;
   string message = 2;
 }

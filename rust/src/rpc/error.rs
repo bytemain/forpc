@@ -5,13 +5,13 @@ use crate::BoxError;
 
 #[derive(Debug)]
 pub struct RpcError {
-    pub code: u32,
+    pub code: i32,
     pub message: String,
     pub source: Option<BoxError>,
 }
 
 impl RpcError {
-    pub fn new(code: u32, message: impl Into<String>) -> Self {
+    pub fn new(code: i32, message: impl Into<String>) -> Self {
         Self {
             code,
             message: message.into(),

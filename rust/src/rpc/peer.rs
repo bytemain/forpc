@@ -70,7 +70,7 @@ impl Response {
         }
     }
     
-    pub fn error_with_code(code: u32, message: impl Into<String>) -> Self {
+    pub fn error_with_code(code: i32, message: impl Into<String>) -> Self {
         Self::error(Status::new(code, message))
     }
 }

@@ -20,15 +20,15 @@ func RegisterUnary[Req any, Resp any](peer *RpcPeer, method string, h func(*Req,
 			}
 		}
 		if len(payload) == 0 {
-			return ResponseError(uint32(pb.StatusCode_INVALID_ARGUMENT), "missing payload")
+			return ResponseError(pb.StatusCode_INVALID_ARGUMENT, "missing payload")
 		}
 		var req Req
 		pm, ok := any(&req).(proto.Message)
 		if !ok {
-			return ResponseError(uint32(pb.StatusCode_INVALID_ARGUMENT), "request type does not implement proto.Message")
+			return ResponseError(pb.StatusCode_INVALID_ARGUMENT, "request type does not implement proto.Message")
 		}
 		if err := proto.Unmarshal(payload, pm); err != nil {
-			return ResponseError(uint32(pb.StatusCode_INVALID_ARGUMENT), err.Error())
+			return ResponseError(pb.StatusCode_INVALID_ARGUMENT, err.Error())
 		}
 		resp, rpcErr := h(&req, r.Metadata, p)
 		if rpcErr != nil {
@@ -36,11 +36,11 @@ func RegisterUnary[Req any, Resp any](peer *RpcPeer, method string, h func(*Req,
 		}
 		rpm, ok := any(resp).(proto.Message)
 		if !ok {
-			return ResponseError(uint32(pb.StatusCode_INTERNAL), "response type does not implement proto.Message")
+			return ResponseError(pb.StatusCode_INTERNAL, "response type does not implement proto.Message")
 		}
 		out, err := proto.Marshal(rpm)
 		if err != nil {
-			return ResponseError(uint32(pb.StatusCode_INTERNAL), err.Error())
+			return ResponseError(pb.StatusCode_INTERNAL, err.Error())
 		}
 		return ResponseOK(out)
 	})

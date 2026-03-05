@@ -11,8 +11,8 @@ pub struct Call {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Status {
-    #[prost(uint32, tag = "1")]
-    pub code: u32,
+    #[prost(enumeration = "StatusCode", tag = "1")]
+    pub code: i32,
     #[prost(string, tag = "2")]
     pub message: ::prost::alloc::string::String,
 }

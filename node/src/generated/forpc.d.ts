@@ -131,7 +131,7 @@ export namespace forpc {
     interface IStatus {
 
         /** Status code */
-        code?: (number|null);
+        code?: (forpc.StatusCode|null);
 
         /** Status message */
         message?: (string|null);
@@ -147,7 +147,7 @@ export namespace forpc {
         constructor(properties?: forpc.IStatus);
 
         /** Status code. */
-        public code: number;
+        public code: forpc.StatusCode;
 
         /** Status message. */
         public message: string;

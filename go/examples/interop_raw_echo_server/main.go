@@ -37,7 +37,7 @@ func main() {
 			}
 		}
 		if len(payload) == 0 {
-			return forpc.ResponseError(uint32(pb.StatusCode_INVALID_ARGUMENT), "Missing payload")
+			return forpc.ResponseError(pb.StatusCode_INVALID_ARGUMENT, "Missing payload")
 		}
 		return forpc.ResponseOK(payload)
 	})
