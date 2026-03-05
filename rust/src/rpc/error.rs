@@ -33,10 +33,8 @@ impl RpcError {
     
     pub fn is_retryable(&self) -> bool {
         matches!(
-            self.code,
-            x if x == StatusCode::Unavailable as i32
-                || x == StatusCode::ResourceExhausted as i32
-                || x == StatusCode::Aborted as i32
+            StatusCode::try_from(self.code),
+            Ok(StatusCode::Unavailable | StatusCode::ResourceExhausted | StatusCode::Aborted)
         )
     }
 }
