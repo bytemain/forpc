@@ -69,7 +69,7 @@ impl Response {
         }
     }
     
-    pub fn error_with_code(code: i32, message: impl Into<String>) -> Self {
+    pub fn error_with_code(code: StatusCode, message: impl Into<String>) -> Self {
         Self::error(Status::new(code, message))
     }
 }
@@ -78,7 +78,7 @@ impl RpcPeer {
     pub async fn connect(url: &str) -> RpcResult<Arc<Self>> {
         let transport = ClientTransport::new(url)
             .await
-            .map_err(|e| RpcError::new(StatusCode::Unavailable as i32, e.to_string()))?;
+            .map_err(|e| RpcError::new(StatusCode::Unavailable, e.to_string()))?;
         Ok(Arc::new(Self::new(transport, true)))
     }
 
@@ -89,7 +89,7 @@ impl RpcPeer {
             std::time::Duration::from_millis(100),
         )
         .await
-        .map_err(|e| RpcError::new(StatusCode::Unavailable as i32, e.to_string()))?;
+        .map_err(|e| RpcError::new(StatusCode::Unavailable, e.to_string()))?;
         Ok(Arc::new(Self::new(transport, true)))
     }
 
@@ -109,7 +109,7 @@ impl RpcPeer {
         T: Message + Default + Send + Sync + 'static,
     {
         T::decode(bytes.as_ref())
-            .map_err(|e| RpcError::new(StatusCode::Internal as i32, e.to_string()))
+            .map_err(|e| RpcError::new(StatusCode::Internal, e.to_string()))
     }
 
     pub async fn send_stream_data(&self, stream_id: u32, payload: Bytes) -> RpcResult<()> {
@@ -174,19 +174,19 @@ impl RpcPeer {
                 }
 
                 if payload.is_empty() {
-                    return Response::error_with_code(StatusCode::InvalidArgument as i32, "Missing payload");
+                    return Response::error_with_code(StatusCode::InvalidArgument, "Missing payload");
                 }
                 
                 let request: Req = match Req::decode(payload.as_ref()) {
                     Ok(r) => r,
-                    Err(e) => return Response::error_with_code(StatusCode::InvalidArgument as i32, format!("Deserialize error: {}", e)),
+                    Err(e) => return Response::error_with_code(StatusCode::InvalidArgument, format!("Deserialize error: {}", e)),
                 };
                 
                 match handler(request, req.metadata, peer).await {
                     Ok(response) => {
                         Response::ok(Bytes::from(response.encode_to_vec()))
                     }
-                    Err(e) => Response::error(Status::new(e.code, e.message)),
+                    Err(e) => Response::error(Status { code: e.code, message: e.message }),
                 }
             }
         }).await;
@@ -194,9 +194,9 @@ impl RpcPeer {
     
     pub async fn send_packet(&self, packet: Packet) -> RpcResult<()> {
         let bytes = {
-            packet.encode().map_err(|e| RpcError::new(StatusCode::Internal as i32, e.to_string()))?
+            packet.encode().map_err(|e| RpcError::new(StatusCode::Internal, e.to_string()))?
         };
-        self.transport.send(bytes).await.map_err(|e| RpcError::new(StatusCode::Unavailable as i32, e.to_string()))?;
+        self.transport.send(bytes).await.map_err(|e| RpcError::new(StatusCode::Unavailable, e.to_string()))?;
         Ok(())
     }
 
@@ -338,7 +338,7 @@ impl RpcPeer {
         }
 
         rx.await
-            .map_err(|_| RpcError::new(StatusCode::Cancelled as i32, "Call cancelled"))?
+            .map_err(|_| RpcError::new(StatusCode::Cancelled, "Call cancelled"))?
     }
     
     pub async fn serve(self: &Arc<Self>) -> RpcResult<()> {
@@ -347,14 +347,14 @@ impl RpcPeer {
                 Ok(b) => b,
                 Err(e) => {
                     if self.running.load(Ordering::Relaxed) {
-                        return Err(RpcError::new(StatusCode::Unavailable as i32, e.to_string()));
+                        return Err(RpcError::new(StatusCode::Unavailable, e.to_string()));
                     }
                     break;
                 }
             };
             
             let packet = {
-                Packet::decode(bytes).map_err(|e| RpcError::new(StatusCode::Internal as i32, e.to_string()))?
+                Packet::decode(bytes).map_err(|e| RpcError::new(StatusCode::Internal, e.to_string()))?
             };
 
             if packet.stream_id == 0 {
@@ -384,7 +384,7 @@ impl RpcPeer {
         match packet.kind {
             frame_kind::HEADERS => {
                 let call: Call = Call::decode(packet.payload.as_ref())
-                    .map_err(|e| RpcError::new(StatusCode::Internal as i32, e.to_string()))?;
+                    .map_err(|e| RpcError::new(StatusCode::Internal, e.to_string()))?;
                 
                 let handler = {
                     let h = self.handlers.read().await;
@@ -431,7 +431,7 @@ impl RpcPeer {
                         }
                     });
                 } else {
-                    let _ = self.send_response(stream_id, Response::error_with_code(StatusCode::Unimplemented as i32, format!("Method {} not found", call.method))).await;
+                    let _ = self.send_response(stream_id, Response::error_with_code(StatusCode::Unimplemented, format!("Method {} not found", call.method))).await;
                 }
             }
             frame_kind::DATA | frame_kind::TRAILERS => {
@@ -609,7 +609,7 @@ mod tests {
         b.register_unary("Test/EchoMeta", |req: TestRequest, meta, _peer| async move {
             let ok = meta.get("k").map(|v| v.as_str()) == Some("v");
             if !ok {
-                return Err(RpcError::new(StatusCode::InvalidArgument as i32, "bad metadata"));
+                return Err(RpcError::new(StatusCode::InvalidArgument, "bad metadata"));
             }
             Ok(TestResponse { result: req.data })
         })

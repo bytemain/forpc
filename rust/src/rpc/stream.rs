@@ -28,7 +28,7 @@ impl<Req: Message + Send + Sync + 'static, Resp: Message + Default + Send + Sync
                     }
                     frame_kind::TRAILERS => {
                         let status: Status = Status::decode(packet.payload.as_ref())
-                             .map_err(|e| RpcError::new(StatusCode::Internal as i32, e.to_string()))?;
+                             .map_err(|e| RpcError::new(StatusCode::Internal, e.to_string()))?;
                         
                         if status.is_ok() {
                             Ok(None)

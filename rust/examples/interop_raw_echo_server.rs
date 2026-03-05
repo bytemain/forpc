@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         }
         if payload.is_empty() {
-            return Response::error_with_code(StatusCode::InvalidArgument as i32, "Missing payload");
+            return Response::error_with_code(StatusCode::InvalidArgument, "Missing payload");
         }
         Response::ok(payload)
     })
