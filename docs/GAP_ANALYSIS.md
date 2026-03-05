@@ -88,7 +88,7 @@ forpc 是一个基于 NNG 传输、使用 Protocol Buffers 做序列化的轻量
 **建议**：
 - Rust：在 `call()` 中用 `tokio::time::timeout()` 包裹响应等待
 - Go：在 `Call()` 中使用 `context.WithTimeout()` + `select` 超时控制
-- Node：使用 `Promise.race()` 或 `AbortSignal.timeout()`
+- Node：使用 `Promise.race()` 或 `AbortSignal.timeout()`（需 Node.js >= 17.3）
 
 ### 3.2 请求取消（高优先级）
 
@@ -116,14 +116,16 @@ forpc 是一个基于 NNG 传输、使用 Protocol Buffers 做序列化的轻量
 **建议**：
 ```rust
 // Rust 示例接口设计
-type Interceptor = Box<dyn Fn(Request, Next) -> Future<Response>>;
+type Interceptor = Box<
+    dyn Fn(Request, Next) -> Pin<Box<dyn Future<Output = Response> + Send>> + Send + Sync,
+>;
 
-peer.add_interceptor(|req, next| async {
+peer.add_interceptor(|req, next| Box::pin(async move {
     let start = Instant::now();
     let resp = next(req).await;
     println!("call took {:?}", start.elapsed());
     resp
-});
+}));
 ```
 
 ### 3.4 Proto 服务代码生成（高优先级）
