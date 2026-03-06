@@ -43,16 +43,16 @@ forpc 帧格式：
 - NNG 传输层额外使用高位标志 `0x80000000` 区分请求路由方向
 - `pending_calls: HashMap<stream_id, PendingCall>` 追踪进行中的调用
 
-### 1.3 当前的不足
+### 1.3 NNG/TCP 已提供 vs 仍需补充
 
-| 缺失能力 | 影响 |
-|----------|------|
-| 无流控（Flow Control） | 快速发送方可淹没慢速接收方 |
-| 无 PING/PONG | 无法检测死连接 |
-| 无 RST_STREAM | 无法取消单个调用 |
-| 无 GOAWAY | 无法优雅关闭连接 |
-| 无 SETTINGS 协商 | 双方无法协商参数 |
-| 无头部压缩 | metadata 重复传输浪费带宽 |
+| 能力 | NNG/TCP 已有 | forpc 仍需补充 |
+|------|-------------|---------------|
+| 流控（Flow Control） | ✅ TCP 滑动窗口（连接级） | ⚠️ per-Stream 级流控（Streaming 场景才需要） |
+| 连接活性检测 | ✅ TCP keepalive（默认探测慢）；IPC 场景进程崩溃时 OS 即时通知 | ⚠️ 秒级 PING/PONG（仅 TCP 远程场景需要） |
+| 调用取消 | ❌ | ✅ RST_STREAM 帧，传播取消到对端 |
+| 优雅关闭 | ❌ | ✅ GOAWAY 帧，排空 in-flight 调用后关闭 |
+| 参数协商 | ❌ | ✅ SETTINGS 帧，协商并发数/窗口等 |
+| 头部压缩 | ❌ | ⚠️ 简化版 HPACK（IPC 场景带宽充裕，优先级低） |
 
 ---
 
@@ -86,9 +86,13 @@ HTTP/2 流控机制：
 - **连接级**：所有 Stream 共享的全局窗口（stream_id=0 的 WINDOW_UPDATE）
 - **Stream 级**：每个 Stream 独立的窗口（防止单个 Stream 独占带宽）
 
-**forpc 借鉴价值**：⭐⭐⭐⭐⭐（最高优先级）
+**NNG/TCP 已提供的能力**：
 
-forpc 当前仅依赖 channel buffer（256 条消息）做粗粒度背压。对于 Streaming RPC，当一端产出远快于另一端消费时，channel 满后会阻塞发送协程，但无法精细控制每个 Stream 的吞吐量。
+TCP 本身有滑动窗口流控，NNG 依赖底层传输（TCP/IPC）自动处理**连接级**背压——当接收方处理不过来时，TCP 窗口会缩小，发送方自然减速。对于大部分场景（单次 Unary RPC），这已经足够。
+
+**forpc 额外需要的（仅限 Streaming 场景）**：⭐⭐⭐
+
+如果 forpc 未来支持长时间 Streaming RPC（多个 Stream 共享一个 NNG 连接），TCP 的连接级流控无法区分各个 Stream 的速率。此时才需要应用层的 **per-Stream 流控**，防止某个慢消费 Stream 影响同连接上的其他 Stream。当前 forpc 以 Unary 调用为主，优先级中等。
 
 ### 2.2 连接健康：PING/PONG
 
@@ -104,9 +108,13 @@ PING 帧用于连接活性检测和 RTT 测量：
 - 如果 M 秒内未收到 ACK，断开连接
 - 配合 `KEEPALIVE_WITHOUT_CALLS` 选项控制空闲连接是否也发 PING
 
-**forpc 借鉴价值**：⭐⭐⭐⭐⭐（最高优先级）
+**NNG/TCP 已提供的能力**：
 
-forpc 当前无任何活性检测。如果底层 TCP/IPC 连接因网络故障、进程崩溃等原因断开，发起方的 pending_calls 会永远阻塞等待，直到应用层超时（如果有的话）。
+TCP 有 `SO_KEEPALIVE` 选项，NNG 可以配置底层 socket 的 keepalive。当连接异常断开时（如对端进程崩溃、网线拔掉），TCP keepalive 最终会检测到并关闭 socket，NNG 的 recv 会返回错误。
+
+**forpc 额外需要的（可选增强）**：⭐⭐⭐
+
+TCP keepalive 的默认探测间隔较长（Linux 默认 75 秒 × 9 次 = 约 11 分钟才判定死连接），且无法测量 RTT。如果 forpc 需要**秒级**的死连接检测（如在线 IDE 场景，用户能快速感知后端断开），可以在应用层加 PING/PONG。但对于 IPC 场景（同机通信），进程崩溃时 OS 会立即关闭 socket，NNG 能即时感知，不需要额外的 PING。
 
 ### 2.3 调用取消：RST_STREAM
 
@@ -354,8 +362,8 @@ GAP_ANALYSIS.md 已识别 TLS 为 P3 优先级。如果 forpc 添加 QUIC 传输
 
 | 机制 | HTTP/2 | HTTP/3 (QUIC) | forpc 现状 | 优先级 | 借鉴方案 |
 |------|--------|---------------|-----------|--------|---------|
-| **流控** | WINDOW_UPDATE | QUIC 内置 | ❌ 仅 channel buffer | P0 | 实现双层窗口流控 |
-| **活性检测** | PING/PONG | QUIC 内置 | ❌ 无 | P0 | 新增 PING/PONG 帧 |
+| **流控** | WINDOW_UPDATE | QUIC 内置 | ⚠️ TCP 连接级流控已有，缺 per-Stream 级 | P1 | Streaming 场景需要时实现 Stream 级窗口 |
+| **活性检测** | PING/PONG | QUIC 内置 | ⚠️ TCP keepalive 已有，但探测慢 | P2 | TCP 场景可选加 PING；IPC 场景无需 |
 | **调用取消** | RST_STREAM | STOP_SENDING | ❌ 无法传播取消 | P0 | 新增 RST_STREAM 帧 |
 | **优雅关闭** | GOAWAY | QUIC 内置 | ❌ 直接断开 | P1 | 新增 GOAWAY 帧 |
 | **参数协商** | SETTINGS | Transport Params | ❌ 无 | P1 | 连接握手时交换 SETTINGS |
