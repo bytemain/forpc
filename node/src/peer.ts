@@ -267,13 +267,16 @@ export class Peer {
     if (timeoutStr) {
       const timeoutMs = parseInt(timeoutStr, 10)
       if (timeoutMs > 0) {
+        let timer: ReturnType<typeof setTimeout>
         const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => {
+          timer = setTimeout(() => {
             this.pendingCalls.delete(streamId)
             reject(new RpcError(StatusCode.DEADLINE_EXCEEDED, 'Deadline exceeded'))
           }, timeoutMs)
         })
-        return Promise.race([resultPromise, timeoutPromise])
+        return Promise.race([resultPromise, timeoutPromise]).finally(() => {
+          clearTimeout(timer)
+        })
       }
     }
 
