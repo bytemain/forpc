@@ -2,6 +2,7 @@ import test from 'ava'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import protobuf from 'protobufjs'
+import { encode, decode } from '@msgpack/msgpack'
 
 import { Peer, RpcError, RawServer } from '../index'
 import type { MessageType, ServiceDefinition } from '../index'
@@ -383,4 +384,27 @@ test('callRaw completes before timeout', async (t) => {
 
   const resp = await peer.callRaw('Raw/Echo', Buffer.from('fast'), { ':timeout': '5000' })
   t.deepEqual(resp, Buffer.from('fast'))
+})
+
+test('Peer and RawServer with MessagePack encoding', async (t) => {
+  const url = `inproc://rpc_msgpack_${process.pid}_${Date.now()}`
+
+  const server = await RawServer.bind(url)
+  server.register('MsgPack/Echo', (payload) => {
+    const decoded = decode(payload) as { message: string }
+    return Buffer.from(encode({ message: decoded.message }))
+  })
+  server.serve()
+
+  const peer = await Peer.connect(url)
+
+  t.teardown(() => {
+    peer.close()
+    server.close()
+  })
+
+  const request = Buffer.from(encode({ message: 'Hello MsgPack' }))
+  const response = await peer.callRaw('MsgPack/Echo', request)
+  const result = decode(response) as { message: string }
+  t.is(result.message, 'Hello MsgPack')
 })
