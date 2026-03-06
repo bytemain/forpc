@@ -39,7 +39,8 @@ forpc 帧格式：
 ### 1.2 Stream 多路复用
 
 - 单连接承载多个并发 Stream（每个 RPC 调用一个 stream_id）
-- 发起方 stream_id ≥ `0x80000000`，接收方 < `0x80000000`（奇偶分区）
+- 发起方使用奇数 stream_id（从 1 开始），接收方使用偶数（从 2 开始），每次递增 2（类似 HTTP/2 的奇偶分区）
+- NNG 传输层额外使用高位标志 `0x80000000` 区分请求路由方向
 - `pending_calls: HashMap<stream_id, PendingCall>` 追踪进行中的调用
 
 ### 1.3 当前的不足
