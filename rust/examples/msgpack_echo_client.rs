@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     });
 
     let req = EchoMsg { message: msg };
-    let payload = rmp_serde::to_vec(&req)?;
+    let payload = rmp_serde::to_vec_named(&req)?;
 
     let resp = peer.call_raw(&method, Bytes::from(payload)).await?;
 

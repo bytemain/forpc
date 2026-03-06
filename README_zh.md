@@ -119,7 +119,7 @@ struct EchoMsg { message: String }
 
 // 客户端：使用 MessagePack 编码，通过 call_raw 发送
 let req = EchoMsg { message: "Hello".into() };
-let payload = rmp_serde::to_vec(&req)?;
+let payload = rmp_serde::to_vec_named(&req)?;  // 使用 to_vec_named 以保持跨语言兼容
 let resp = peer.call_raw("MsgPack/Echo", Bytes::from(payload)).await?;
 let reply: EchoMsg = rmp_serde::from_slice(&resp)?;
 println!("reply: {}", reply.message);

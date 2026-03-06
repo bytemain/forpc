@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let reply = EchoMsg {
             message: msg.message,
         };
-        match rmp_serde::to_vec(&reply) {
+        match rmp_serde::to_vec_named(&reply) {
             Ok(data) => Response::ok(Bytes::from(data)),
             Err(e) => Response::error_with_code(
                 StatusCode::Internal,

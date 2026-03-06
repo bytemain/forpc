@@ -122,7 +122,7 @@ struct EchoMsg { message: String }
 
 // Client: encode with MessagePack, send via call_raw
 let req = EchoMsg { message: "Hello".into() };
-let payload = rmp_serde::to_vec(&req)?;
+let payload = rmp_serde::to_vec_named(&req)?;  // use to_vec_named for cross-language compat
 let resp = peer.call_raw("MsgPack/Echo", Bytes::from(payload)).await?;
 let reply: EchoMsg = rmp_serde::from_slice(&resp)?;
 println!("reply: {}", reply.message);
