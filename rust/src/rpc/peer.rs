@@ -313,6 +313,8 @@ impl RpcPeer {
             metadata,
         };
 
+        let timeout_duration = call.timeout_ms().map(std::time::Duration::from_millis);
+
         let (tx, rx) = oneshot::channel();
         self
             .insert_pending_call(
@@ -340,8 +342,19 @@ impl RpcPeer {
             return Err(e);
         }
 
-        rx.await
-            .map_err(|_| RpcError::new(StatusCode::Cancelled, "Call cancelled"))?
+        if let Some(duration) = timeout_duration {
+            match tokio::time::timeout(duration, rx).await {
+                Ok(result) => result
+                    .map_err(|_| RpcError::new(StatusCode::Cancelled, "Call cancelled"))?,
+                Err(_) => {
+                    self.remove_pending_call(stream_id).await;
+                    Err(RpcError::new(StatusCode::DeadlineExceeded, "Deadline exceeded"))
+                }
+            }
+        } else {
+            rx.await
+                .map_err(|_| RpcError::new(StatusCode::Cancelled, "Call cancelled"))?
+        }
     }
     
     pub async fn serve(self: &Arc<Self>) -> RpcResult<()> {
@@ -652,5 +665,57 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp, TestResponse { result: "Ok".into() });
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn unary_call_deadline_exceeded() {
+        let (ta, tb) = ChannelTransport::pair(256);
+        let a = Arc::new(RpcPeer::new(ta, true));
+        let b = Arc::new(RpcPeer::new(tb, false));
+
+        b.register_unary("Test/Slow", |req: TestRequest, _meta, _peer| async move {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            Ok(TestResponse { result: req.data })
+        })
+        .await;
+
+        let _a_task = spawn_peer(a.clone()).await;
+        let _b_task = spawn_peer(b.clone()).await;
+
+        let mut meta = HashMap::new();
+        meta.insert(":timeout".into(), "100".into());
+        let err = a
+            .call_with_metadata::<TestRequest, TestResponse>(
+                "Test/Slow",
+                TestRequest { data: "Hello".into() },
+                meta,
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.code, StatusCode::DeadlineExceeded as i32);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn unary_call_completes_before_timeout() {
+        let (ta, tb) = ChannelTransport::pair(256);
+        let a = Arc::new(RpcPeer::new(ta, true));
+        let b = Arc::new(RpcPeer::new(tb, false));
+
+        b.register_unary("Test/Echo", |req: TestRequest, _meta, _peer| async move {
+            Ok(TestResponse { result: req.data })
+        })
+        .await;
+
+        let _a_task = spawn_peer(a.clone()).await;
+        let _b_task = spawn_peer(b.clone()).await;
+
+        let mut meta = HashMap::new();
+        meta.insert(":timeout".into(), "5000".into());
+        let resp: TestResponse = a
+            .call_with_metadata("Test/Echo", TestRequest { data: "Fast".into() }, meta)
+            .await
+            .unwrap();
+        assert_eq!(resp, TestResponse { result: "Fast".into() });
     }
 }
