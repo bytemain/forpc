@@ -70,6 +70,8 @@ echo "build: go examples"
 (cd "$repo_root/go" && go build -o "$tmp_dir/go_call" ./examples/interop_echo_client)
 (cd "$repo_root/go" && go build -o "$tmp_dir/go_raw_serve" ./examples/interop_raw_echo_server)
 (cd "$repo_root/go" && go build -o "$tmp_dir/go_raw_call" ./examples/interop_raw_echo_client)
+(cd "$repo_root/go" && go build -o "$tmp_dir/go_msgpack_serve" ./examples/msgpack_echo_server)
+(cd "$repo_root/go" && go build -o "$tmp_dir/go_msgpack_call" ./examples/msgpack_echo_client)
 
 echo "build: node addon"
 (cd "$repo_root/node" && npm run build:debug >/dev/null)
@@ -78,6 +80,8 @@ rust_echo_server="$repo_root/rust/target/debug/examples/interop_echo_server"
 rust_echo_client="$repo_root/rust/target/debug/examples/interop_echo_client"
 rust_raw_echo_server="$repo_root/rust/target/debug/examples/interop_raw_echo_server"
 rust_raw_echo_client="$repo_root/rust/target/debug/examples/interop_raw_echo_client"
+rust_msgpack_server="$repo_root/rust/target/debug/examples/msgpack_echo_server"
+rust_msgpack_client="$repo_root/rust/target/debug/examples/msgpack_echo_client"
 
 node_cmd="node --import $repo_root/node/node_modules/@oxc-node/core/register.mjs"
 node_dir="$repo_root/node"
@@ -85,6 +89,8 @@ node_echo_server="$node_cmd $node_dir/scripts/interop_echo_server.js"
 node_echo_client="$node_cmd $node_dir/scripts/interop_echo_client.js"
 node_raw_server="$node_cmd $node_dir/scripts/interop_raw_echo_server.js"
 node_raw_client="$node_cmd $node_dir/scripts/interop_raw_echo_client.js"
+node_msgpack_server="$node_cmd $node_dir/scripts/msgpack_echo_server.js"
+node_msgpack_client="$node_cmd $node_dir/scripts/msgpack_echo_client.js"
 
 run_with_retries() {
   local name="$1"
@@ -271,5 +277,79 @@ wait_port 127.0.0.1 "$port" 15
 out="$($node_raw_client "$url" "Raw/Echo" "HelloNode")"
 echo "$out" | grep -q "reply: HelloNode"
 echo "ok: node raw server -> node raw client"
+
+stop_pids
+
+# --- MessagePack cross-language interop tests ---
+
+echo "case: rust msgpack server -> go msgpack client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+"$rust_msgpack_server" "$url" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$("$tmp_dir/go_msgpack_call" --connect "$url" --msg "Hello")"
+echo "$out" | grep -q "reply: Hello"
+echo "ok: rust msgpack server -> go msgpack client"
+
+stop_pids
+
+echo "case: go msgpack server -> rust msgpack client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+"$tmp_dir/go_msgpack_serve" --listen "$url" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$("$rust_msgpack_client" "$url" "MsgPack/Echo" "Hello")"
+echo "$out" | grep -q "reply: Hello"
+echo "ok: go msgpack server -> rust msgpack client"
+
+stop_pids
+
+echo "case: rust msgpack server -> node msgpack client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+"$rust_msgpack_server" "$url" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$($node_msgpack_client "$url" "MsgPack/Echo" "Hello")"
+echo "$out" | grep -q "reply: Hello"
+echo "ok: rust msgpack server -> node msgpack client"
+
+stop_pids
+
+echo "case: node msgpack server -> rust msgpack client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+$node_msgpack_server "$url" "MsgPack/Echo" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$("$rust_msgpack_client" "$url" "MsgPack/Echo" "HelloNode")"
+echo "$out" | grep -q "reply: HelloNode"
+echo "ok: node msgpack server -> rust msgpack client"
+
+stop_pids
+
+echo "case: go msgpack server -> node msgpack client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+"$tmp_dir/go_msgpack_serve" --listen "$url" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$($node_msgpack_client "$url" "MsgPack/Echo" "Hello")"
+echo "$out" | grep -q "reply: Hello"
+echo "ok: go msgpack server -> node msgpack client"
+
+stop_pids
+
+echo "case: node msgpack server -> go msgpack client"
+port="$(pick_port)"
+url="tcp://127.0.0.1:$port"
+$node_msgpack_server "$url" "MsgPack/Echo" >/dev/null 2>&1 &
+cleanup_pids+=("$!")
+wait_port 127.0.0.1 "$port" 15
+out="$("$tmp_dir/go_msgpack_call" --connect "$url" --msg "HelloNode")"
+echo "$out" | grep -q "reply: HelloNode"
+echo "ok: node msgpack server -> go msgpack client"
 
 echo "all ok"
