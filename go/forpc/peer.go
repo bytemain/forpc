@@ -53,8 +53,7 @@ type resultBytes struct {
 }
 
 type inboundState struct {
-	tx     chan Packet
-	cancel context.CancelFunc
+	tx chan Packet
 }
 
 type RpcPeer struct {
@@ -68,6 +67,9 @@ type RpcPeer struct {
 
 	inboundMu sync.Mutex
 	inbound   map[uint32]*inboundState
+
+	cancelsMu sync.Mutex
+	cancels   map[uint32]context.CancelFunc
 
 	nextStreamID atomic.Uint32
 	isInitiator  bool
@@ -97,6 +99,7 @@ func NewPeer(t transport.Transport, isInitiator bool) *RpcPeer {
 		handlers:    make(map[string]handlerFunc),
 		pending:     make(map[uint32]*pendingCall),
 		inbound:     make(map[uint32]*inboundState),
+		cancels:     make(map[uint32]context.CancelFunc),
 		isInitiator: isInitiator,
 	}
 	if isInitiator {
@@ -283,8 +286,11 @@ func (p *RpcPeer) handleInbound(pkt Packet) error {
 		ctx, cancel := context.WithCancel(context.Background())
 		rx := make(chan Packet, 32)
 		p.inboundMu.Lock()
-		p.inbound[pkt.StreamID] = &inboundState{tx: rx, cancel: cancel}
+		p.inbound[pkt.StreamID] = &inboundState{tx: rx}
 		p.inboundMu.Unlock()
+		p.cancelsMu.Lock()
+		p.cancels[pkt.StreamID] = cancel
+		p.cancelsMu.Unlock()
 
 		req := Request{
 			Method:   call.Method,
@@ -297,16 +303,26 @@ func (p *RpcPeer) handleInbound(pkt Packet) error {
 
 		go func() {
 			resp := h(req, p)
+			// Clean up cancel function after handler completes
+			p.cancelsMu.Lock()
+			delete(p.cancels, pkt.StreamID)
+			p.cancelsMu.Unlock()
 			_ = p.sendResponse(pkt.StreamID, resp)
 		}()
 
 	case FrameRstStream:
+		p.cancelsMu.Lock()
+		cancelFn := p.cancels[pkt.StreamID]
+		delete(p.cancels, pkt.StreamID)
+		p.cancelsMu.Unlock()
+		if cancelFn != nil {
+			cancelFn()
+		}
 		p.inboundMu.Lock()
 		st := p.inbound[pkt.StreamID]
 		delete(p.inbound, pkt.StreamID)
 		p.inboundMu.Unlock()
 		if st != nil {
-			st.cancel()
 			close(st.tx)
 		}
 
