@@ -212,7 +212,7 @@ impl RpcPeer {
         pending.insert(stream_id, pending_call);
     }
 
-    async fn remove_pending_call(&self, stream_id: u32) {
+    pub(crate) async fn remove_pending_call(&self, stream_id: u32) {
         let mut pending = self.pending_calls.lock().await;
         pending.remove(&stream_id);
     }
@@ -850,5 +850,45 @@ mod tests {
         // Verify error code
         let error_code = u32::from_be_bytes(decoded.payload[..4].try_into().unwrap());
         assert_eq!(error_code, StatusCode::Cancelled as u32);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bidi_stream_cancel_sends_rst_stream() {
+        let (ta, tb) = ChannelTransport::pair(256);
+        let a = Arc::new(RpcPeer::new(ta, true));
+        let b = Arc::new(RpcPeer::new(tb, false));
+
+        // Register a handler that waits for cancellation via cancel_token
+        let cancel_observed = Arc::new(AtomicBool::new(false));
+        let cancel_observed_clone = cancel_observed.clone();
+
+        b.register("Chat/Stream", move |req: Request, _peer| {
+            let observed = cancel_observed_clone.clone();
+            Box::pin(async move {
+                tokio::select! {
+                    _ = req.cancel_token.cancelled() => {
+                        observed.store(true, Ordering::SeqCst);
+                        Response::error_with_code(StatusCode::Cancelled, "Cancelled")
+                    }
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+                        Response::ok(Bytes::from_static(b"done"))
+                    }
+                }
+            })
+        }).await;
+
+        let _a_task = spawn_peer(a.clone()).await;
+        let _b_task = spawn_peer(b.clone()).await;
+
+        // Open a stream and then cancel it
+        let mut stream = a.stream::<TestRequest, TestResponse>("Chat/Stream").await.unwrap();
+        stream.send(TestRequest { data: "hello".into() }).await.unwrap();
+
+        // Cancel the stream — this sends RST_STREAM
+        stream.cancel().await.unwrap();
+
+        // Wait for cancellation to propagate
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert!(cancel_observed.load(Ordering::SeqCst), "Server handler should have observed stream cancellation");
     }
 }

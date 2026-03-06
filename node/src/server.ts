@@ -258,6 +258,11 @@ export class RawServer {
         }
         break
       }
+      case FrameKind.RST_STREAM: {
+        // Client cancelled the stream — clean up state
+        this.streams.delete(packet.streamId)
+        break
+      }
       case FrameKind.TRAILERS: {
         const stream = this.streams.get(packet.streamId)
         if (!stream) break

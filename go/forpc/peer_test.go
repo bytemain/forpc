@@ -330,3 +330,61 @@ func TestRstStreamPacketRoundtrip(t *testing.T) {
 		t.Fatalf("expected error code %d, got %d", errorCode, decodedCode)
 	}
 }
+
+func TestBidiStreamCancel(t *testing.T) {
+	url := "inproc://forpc_go_bidi_cancel"
+
+	l, err := Bind(url)
+	if err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+	defer l.Close()
+
+	cancelObserved := make(chan struct{}, 1)
+
+	go func() {
+		p, err := l.Accept()
+		if err != nil {
+			return
+		}
+		// Register a handler that waits for context cancellation
+		p.Register("Chat/Stream", func(r Request, _ *RpcPeer) Response {
+			select {
+			case <-r.Ctx.Done():
+				cancelObserved <- struct{}{}
+				return ResponseError(pb.StatusCode_CANCELLED, "Cancelled")
+			case <-time.After(10 * time.Second):
+				return ResponseOK([]byte("done"))
+			}
+		})
+		_ = p.Serve()
+	}()
+
+	c, err := ConnectWithRetry(url, 10)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer c.Close()
+
+	go func() { _ = c.Serve() }()
+
+	stream, err := Stream[pb.ChatMessage, pb.ChatMessage](c, "Chat/Stream")
+	if err != nil {
+		t.Fatalf("stream: %v", err)
+	}
+
+	// Send a message then cancel
+	if err := stream.Send(&pb.ChatMessage{Text: "hello"}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+
+	stream.Cancel()
+
+	// Wait for the server handler to observe cancellation via context
+	select {
+	case <-cancelObserved:
+		// success
+	case <-time.After(2 * time.Second):
+		t.Fatalf("server handler did not observe stream cancellation")
+	}
+}
