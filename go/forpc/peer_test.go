@@ -1,6 +1,7 @@
 package forpc
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -58,6 +59,91 @@ func TestUnaryCallInproc(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatalf("call timeout")
+	}
+}
+
+func TestUnaryCallDeadlineExceeded(t *testing.T) {
+	url := "inproc://forpc_go_timeout"
+
+	l, err := Bind(url)
+	if err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+	defer l.Close()
+
+	go func() {
+		p, err := l.Accept()
+		if err != nil {
+			return
+		}
+
+		RegisterUnary[pb.TestRequest, pb.TestResponse](p, "Test/Slow", func(req *pb.TestRequest, _ map[string]string, _ *RpcPeer) (*pb.TestResponse, *RpcError) {
+			time.Sleep(5 * time.Second)
+			return &pb.TestResponse{Result: req.Data}, nil
+		})
+
+		_ = p.Serve()
+	}()
+
+	c, err := ConnectWithRetry(url, 10)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer c.Close()
+
+	go func() { _ = c.Serve() }()
+
+	meta := map[string]string{":timeout": "100"}
+	_, callErr := CallUnaryWithMetadata[pb.TestRequest, pb.TestResponse](c, "Test/Slow", &pb.TestRequest{Data: "Hello"}, meta)
+	if callErr == nil {
+		t.Fatalf("expected deadline exceeded error, got nil")
+	}
+	var rpcErr *RpcError
+	if !errors.As(callErr, &rpcErr) {
+		t.Fatalf("expected RpcError, got %T: %v", callErr, callErr)
+	}
+	if rpcErr.Code != pb.StatusCode_DEADLINE_EXCEEDED {
+		t.Fatalf("expected DEADLINE_EXCEEDED, got %v", rpcErr.Code)
+	}
+}
+
+func TestUnaryCallCompletesBeforeTimeout(t *testing.T) {
+	url := "inproc://forpc_go_timeout_ok"
+
+	l, err := Bind(url)
+	if err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+	defer l.Close()
+
+	go func() {
+		p, err := l.Accept()
+		if err != nil {
+			return
+		}
+
+		RegisterUnary[pb.TestRequest, pb.TestResponse](p, "Test/Echo", func(req *pb.TestRequest, _ map[string]string, _ *RpcPeer) (*pb.TestResponse, *RpcError) {
+			return &pb.TestResponse{Result: req.Data}, nil
+		})
+
+		_ = p.Serve()
+	}()
+
+	c, err := ConnectWithRetry(url, 10)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer c.Close()
+
+	go func() { _ = c.Serve() }()
+
+	meta := map[string]string{":timeout": "5000"}
+	resp, callErr := CallUnaryWithMetadata[pb.TestRequest, pb.TestResponse](c, "Test/Echo", &pb.TestRequest{Data: "Fast"}, meta)
+	if callErr != nil {
+		t.Fatalf("unexpected error: %v", callErr)
+	}
+	if resp.Result != "Fast" {
+		t.Fatalf("unexpected resp: %#v", resp)
 	}
 }
 

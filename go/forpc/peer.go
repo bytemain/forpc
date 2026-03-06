@@ -1,6 +1,7 @@
 package forpc
 
 import (
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -173,6 +174,26 @@ func (p *RpcPeer) unaryRawWithMetadata(method string, meta map[string]string, pa
 		return nil, err
 	}
 	cleanup = false
+
+	var timeoutCh <-chan time.Time
+	if ts, ok := meta[":timeout"]; ok {
+		if ms, err := strconv.ParseInt(ts, 10, 64); err == nil && ms > 0 {
+			timeoutCh = time.After(time.Duration(ms) * time.Millisecond)
+		}
+	}
+
+	if timeoutCh != nil {
+		select {
+		case res := <-pc.unaryCh:
+			if res.err != nil {
+				return nil, res.err
+			}
+			return res.b, nil
+		case <-timeoutCh:
+			p.removePending(streamID)
+			return nil, NewRpcError(pb.StatusCode_DEADLINE_EXCEEDED, "Deadline exceeded")
+		}
+	}
 
 	res := <-pc.unaryCh
 	if res.err != nil {

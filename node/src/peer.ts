@@ -262,6 +262,24 @@ export class Peer {
     // Ensure the processing loop is running
     this.ensureLoop()
 
+    // Apply timeout if :timeout metadata is set
+    const timeoutStr = call.metadata[':timeout']
+    if (timeoutStr) {
+      const timeoutMs = parseInt(timeoutStr, 10)
+      if (timeoutMs > 0) {
+        let timer: ReturnType<typeof setTimeout>
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            this.pendingCalls.delete(streamId)
+            reject(new RpcError(StatusCode.DEADLINE_EXCEEDED, 'Deadline exceeded'))
+          }, timeoutMs)
+        })
+        return Promise.race([resultPromise, timeoutPromise]).finally(() => {
+          clearTimeout(timer)
+        })
+      }
+    }
+
     // Wait for response from processing loop
     return resultPromise
   }
