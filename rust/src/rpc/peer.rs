@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::pin::Pin;
 use std::future::Future;
 use tokio::sync::{mpsc, Mutex, oneshot, RwLock};
+use tokio_util::sync::CancellationToken;
 use bytes::Bytes;
 use prost::Message;
 
@@ -36,6 +37,7 @@ pub(crate) struct PendingCall {
 
 pub(crate) struct StreamState {
     tx: mpsc::Sender<Packet>,
+    cancel_token: CancellationToken,
 }
 
 pub struct Request {
@@ -44,6 +46,7 @@ pub struct Request {
     pub payload: Option<Bytes>,
     pub stream: Option<mpsc::Receiver<Packet>>, // Packet contains payload
     pub stream_id: u32,
+    pub cancel_token: CancellationToken,
 }
 
 pub struct Response {
@@ -348,6 +351,7 @@ impl RpcPeer {
                     .map_err(|_| RpcError::new(StatusCode::Cancelled, "Call cancelled"))?,
                 Err(_) => {
                     self.remove_pending_call(stream_id).await;
+                    let _ = self.send_packet(Packet::rst_stream(stream_id, StatusCode::Cancelled as u32)).await;
                     Err(RpcError::new(StatusCode::DeadlineExceeded, "Deadline exceeded"))
                 }
             }
@@ -408,10 +412,11 @@ impl RpcPeer {
                 };
 
                 if let Some(handler) = handler {
+                    let cancel_token = CancellationToken::new();
                     let (tx, rx) = mpsc::channel(32);
                     {
                         let mut streams = self.inbound_streams.lock().await;
-                        streams.insert(stream_id, StreamState { tx: tx.clone() });
+                        streams.insert(stream_id, StreamState { tx: tx.clone(), cancel_token: cancel_token.clone() });
                     }
 
                     if let Some(buffered) = {
@@ -437,6 +442,7 @@ impl RpcPeer {
                         payload: None,
                         stream: Some(rx),
                         stream_id,
+                        cancel_token: cancel_token.clone(),
                     };
                     
                     let peer_clone = self.clone();
@@ -449,6 +455,14 @@ impl RpcPeer {
                 } else {
                     let _ = self.send_response(stream_id, Response::error_with_code(StatusCode::Unimplemented, format!("Method {} not found", call.method))).await;
                 }
+            }
+            frame_kind::RST_STREAM => {
+                let mut streams = self.inbound_streams.lock().await;
+                if let Some(state) = streams.remove(&stream_id) {
+                    state.cancel_token.cancel();
+                }
+                let mut early = self.early_inbound.lock().await;
+                early.remove(&stream_id);
             }
             frame_kind::DATA | frame_kind::TRAILERS => {
                 let mut packet_opt = Some(packet);
@@ -522,6 +536,17 @@ impl RpcPeer {
                      if let Some(tx) = call.stream_tx {
                          let _ = tx.send(packet).await; 
                      }
+                }
+            }
+            frame_kind::RST_STREAM => {
+                let mut pending = self.pending_calls.lock().await;
+                if let Some(call) = pending.remove(&stream_id) {
+                    if let Some(tx) = call.tx {
+                        let _ = tx.send(Err(RpcError::new(StatusCode::Cancelled, "Stream reset by peer")));
+                    }
+                    if let Some(tx) = call.stream_tx {
+                        drop(tx);
+                    }
                 }
             }
             _ => {}

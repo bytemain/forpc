@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anng = { git = "https://github.com/bytemain/nng-rs.git", branch = "main" }
 tokio = { version = "1.49.0", features = ["full"] }
+tokio-util = "0.7"
 prost = "0.13"
 async-trait = "0.1.89"
 bytes = "1.11.1"

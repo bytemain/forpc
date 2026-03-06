@@ -25,6 +25,7 @@ import {
   headersPacket,
   dataPacket,
   trailersPacket,
+  rstStreamPacket,
   statusOk,
   decodeStatus,
 } from './protocol.ts'
@@ -210,6 +211,9 @@ export class Peer {
             } else {
               pending.reject(new RpcError(status.code, status.message))
             }
+          } else if (packet.kind === FrameKind.RST_STREAM) {
+            this.pendingCalls.delete(packet.streamId)
+            pending.reject(new RpcError(StatusCode.CANCELLED, 'Stream reset by peer'))
           }
         }
       } catch (err) {
@@ -271,6 +275,7 @@ export class Peer {
         const timeoutPromise = new Promise<never>((_, reject) => {
           timer = setTimeout(() => {
             this.pendingCalls.delete(streamId)
+            this.sendQueue.push(encodePacket(rstStreamPacket(streamId, StatusCode.CANCELLED)))
             reject(new RpcError(StatusCode.DEADLINE_EXCEEDED, 'Deadline exceeded'))
           }, timeoutMs)
         })
