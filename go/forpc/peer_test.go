@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/vmihailenco/msgpack/v5"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/bytemain/forpc/go/forpc/pb"
@@ -236,5 +237,91 @@ func TestBidiStreamInproc(t *testing.T) {
 done:
 	if received != 3 {
 		t.Fatalf("expected 3, got %d", received)
+	}
+}
+
+type testMsgPackMsg struct {
+	Message string `msgpack:"message"`
+}
+
+func TestMsgPackCallRaw(t *testing.T) {
+	url := "inproc://forpc_go_msgpack"
+
+	l, err := Bind(url)
+	if err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+	defer l.Close()
+
+	go func() {
+		p, err := l.Accept()
+		if err != nil {
+			return
+		}
+
+		p.Register("MsgPack/Echo", func(r Request, _ *RpcPeer) Response {
+			var payload []byte
+			if r.Payload != nil {
+				payload = r.Payload
+			} else if r.Stream != nil {
+				for pkt := range r.Stream {
+					if pkt.Kind == FrameData {
+						payload = pkt.Payload
+					}
+				}
+			}
+			if len(payload) == 0 {
+				return ResponseError(pb.StatusCode_INVALID_ARGUMENT, "missing payload")
+			}
+			var msg testMsgPackMsg
+			if err := msgpack.Unmarshal(payload, &msg); err != nil {
+				return ResponseError(pb.StatusCode_INVALID_ARGUMENT, err.Error())
+			}
+			out, err := msgpack.Marshal(&testMsgPackMsg{Message: msg.Message})
+			if err != nil {
+				return ResponseError(pb.StatusCode_INTERNAL, err.Error())
+			}
+			return ResponseOK(out)
+		})
+
+		_ = p.Serve()
+	}()
+
+	c, err := ConnectWithRetry(url, 10)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer c.Close()
+
+	go func() { _ = c.Serve() }()
+
+	reqBytes, err := msgpack.Marshal(&testMsgPackMsg{Message: "Hello MsgPack"})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	type result struct {
+		resp []byte
+		err  error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		resp, err := c.CallRaw("MsgPack/Echo", reqBytes)
+		ch <- result{resp: resp, err: err}
+	}()
+	select {
+	case r := <-ch:
+		if r.err != nil {
+			t.Fatalf("call: %v", r.err)
+		}
+		var msg testMsgPackMsg
+		if err := msgpack.Unmarshal(r.resp, &msg); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		if msg.Message != "Hello MsgPack" {
+			t.Fatalf("unexpected message: got %q, want %q", msg.Message, "Hello MsgPack")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("call timeout")
 	}
 }
