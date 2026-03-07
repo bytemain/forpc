@@ -265,7 +265,7 @@ export class RawServer {
         // Client cancelled the stream — abort the signal and clean up state
         const stream = this.streams.get(packet.streamId)
         if (stream) {
-          stream.abortController.abort()
+          stream.abortController.abort(new Error('Stream cancelled by peer'))
         }
         this.streams.delete(packet.streamId)
         break
