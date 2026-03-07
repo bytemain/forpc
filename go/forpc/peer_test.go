@@ -1,6 +1,7 @@
 package forpc
 
 import (
+	"encoding/binary"
 	"errors"
 	"testing"
 	"time"
@@ -236,5 +237,154 @@ func TestBidiStreamInproc(t *testing.T) {
 done:
 	if received != 3 {
 		t.Fatalf("expected 3, got %d", received)
+	}
+}
+
+func TestRstStreamCancelsServerHandler(t *testing.T) {
+	url := "inproc://forpc_go_rst_cancel"
+
+	l, err := Bind(url)
+	if err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+	defer l.Close()
+
+	cancelObserved := make(chan struct{}, 1)
+
+	go func() {
+		p, err := l.Accept()
+		if err != nil {
+			return
+		}
+
+		// Register a slow handler that checks for cancellation via context
+		p.Register("Test/SlowCancel", func(r Request, _ *RpcPeer) Response {
+			select {
+			case <-r.Ctx.Done():
+				cancelObserved <- struct{}{}
+				return ResponseError(pb.StatusCode_CANCELLED, "Cancelled")
+			case <-time.After(10 * time.Second):
+				return ResponseOK([]byte("done"))
+			}
+		})
+
+		_ = p.Serve()
+	}()
+
+	c, err := ConnectWithRetry(url, 10)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer c.Close()
+
+	go func() { _ = c.Serve() }()
+
+	// Call with short timeout → triggers RST_STREAM on timeout
+	meta := map[string]string{":timeout": "100"}
+	_, callErr := c.CallRawWithMetadata("Test/SlowCancel", []byte("test"), meta)
+	if callErr == nil {
+		t.Fatalf("expected deadline exceeded error, got nil")
+	}
+	var rpcErr *RpcError
+	if !errors.As(callErr, &rpcErr) {
+		t.Fatalf("expected RpcError, got %T: %v", callErr, callErr)
+	}
+	if rpcErr.Code != pb.StatusCode_DEADLINE_EXCEEDED {
+		t.Fatalf("expected DEADLINE_EXCEEDED, got %v", rpcErr.Code)
+	}
+
+	// Wait for the server handler to observe cancellation
+	select {
+	case <-cancelObserved:
+		// success
+	case <-time.After(2 * time.Second):
+		t.Fatalf("server handler did not observe cancellation")
+	}
+}
+
+func TestRstStreamPacketRoundtrip(t *testing.T) {
+	streamID := uint32(42)
+	errorCode := uint32(pb.StatusCode_CANCELLED)
+	payload := make([]byte, 4)
+	binary.BigEndian.PutUint32(payload, errorCode)
+	pkt := Packet{StreamID: streamID, Kind: FrameRstStream, Payload: payload}
+	encoded, err := pkt.Encode()
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	decoded, err := DecodePacket(encoded)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if decoded.StreamID != streamID {
+		t.Fatalf("expected stream_id %d, got %d", streamID, decoded.StreamID)
+	}
+	if decoded.Kind != FrameRstStream {
+		t.Fatalf("expected kind %d, got %d", FrameRstStream, decoded.Kind)
+	}
+	if len(decoded.Payload) != 4 {
+		t.Fatalf("expected 4 bytes payload, got %d", len(decoded.Payload))
+	}
+	decodedCode := binary.BigEndian.Uint32(decoded.Payload)
+	if decodedCode != errorCode {
+		t.Fatalf("expected error code %d, got %d", errorCode, decodedCode)
+	}
+}
+
+func TestBidiStreamCancel(t *testing.T) {
+	url := "inproc://forpc_go_bidi_cancel"
+
+	l, err := Bind(url)
+	if err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+	defer l.Close()
+
+	cancelObserved := make(chan struct{}, 1)
+
+	go func() {
+		p, err := l.Accept()
+		if err != nil {
+			return
+		}
+		// Register a handler that waits for context cancellation
+		p.Register("Chat/Stream", func(r Request, _ *RpcPeer) Response {
+			select {
+			case <-r.Ctx.Done():
+				cancelObserved <- struct{}{}
+				return ResponseError(pb.StatusCode_CANCELLED, "Cancelled")
+			case <-time.After(10 * time.Second):
+				return ResponseOK([]byte("done"))
+			}
+		})
+		_ = p.Serve()
+	}()
+
+	c, err := ConnectWithRetry(url, 10)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer c.Close()
+
+	go func() { _ = c.Serve() }()
+
+	stream, err := Stream[pb.ChatMessage, pb.ChatMessage](c, "Chat/Stream")
+	if err != nil {
+		t.Fatalf("stream: %v", err)
+	}
+
+	// Send a message then cancel
+	if err := stream.Send(&pb.ChatMessage{Text: "hello"}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+
+	stream.Cancel()
+
+	// Wait for the server handler to observe cancellation via context
+	select {
+	case <-cancelObserved:
+		// success
+	case <-time.After(2 * time.Second):
+		t.Fatalf("server handler did not observe stream cancellation")
 	}
 }

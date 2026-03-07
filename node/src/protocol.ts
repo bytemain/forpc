@@ -18,6 +18,7 @@ export const FrameKind = {
   HEADERS: 0,
   DATA: 1,
   TRAILERS: 2,
+  RST_STREAM: 3,
 } as const
 
 // gRPC-compatible status codes from protobuf definition
@@ -137,6 +138,19 @@ export function trailersPacket(streamId: number, status: Status): Packet {
     streamId,
     kind: FrameKind.TRAILERS,
     payload: encodeStatus(status),
+  }
+}
+
+/**
+ * Create a RST_STREAM packet with an error code (u32 BE)
+ */
+export function rstStreamPacket(streamId: number, errorCode: number): Packet {
+  const payload = Buffer.alloc(4)
+  payload.writeUInt32BE(errorCode, 0)
+  return {
+    streamId,
+    kind: FrameKind.RST_STREAM,
+    payload,
   }
 }
 

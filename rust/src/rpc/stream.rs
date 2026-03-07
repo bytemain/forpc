@@ -48,4 +48,15 @@ impl<Req: Message + Send + Sync + 'static, Resp: Message + Default + Send + Sync
             .send_stream_trailers(self.stream_id, &Status::ok())
             .await
     }
+
+    /// Cancel the stream by sending RST_STREAM to the remote peer.
+    ///
+    /// This removes the pending call and sends a RST_STREAM frame with CANCELLED
+    /// error code, signaling the server to stop processing this stream.
+    pub async fn cancel(&mut self) -> RpcResult<()> {
+        self.peer.remove_pending_call(self.stream_id).await;
+        self.peer
+            .send_packet(Packet::rst_stream(self.stream_id, StatusCode::Cancelled as u32))
+            .await
+    }
 }
