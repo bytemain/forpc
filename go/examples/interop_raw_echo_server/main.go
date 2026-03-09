@@ -6,7 +6,6 @@ import (
 	"log"
 
 	"github.com/bytemain/forpc/go/forpc"
-	"github.com/bytemain/forpc/go/forpc/pb"
 )
 
 func main() {
@@ -27,19 +26,8 @@ func main() {
 	}
 	defer p.Close()
 
-	p.Register(*method, func(req forpc.Request, _ *forpc.RpcPeer) forpc.Response {
-		var payload []byte
-		for pkt := range req.Stream {
-			if pkt.Kind == forpc.FrameData {
-				payload = pkt.Payload
-			} else if pkt.Kind == forpc.FrameTrailers {
-				break
-			}
-		}
-		if len(payload) == 0 {
-			return forpc.ResponseError(pb.StatusCode_INVALID_ARGUMENT, "Missing payload")
-		}
-		return forpc.ResponseOK(payload)
+	forpc.RegisterRaw(p, *method, func(payload []byte, _ map[string]string, _ *forpc.RpcPeer) ([]byte, *forpc.RpcError) {
+		return payload, nil
 	})
 
 	if err := p.Serve(); err != nil {
