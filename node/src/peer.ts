@@ -25,6 +25,7 @@ import {
   headersPacket,
   dataPacket,
   trailersPacket,
+  rstStreamPacket,
   statusOk,
   decodeStatus,
 } from './protocol.ts'
@@ -210,6 +211,9 @@ export class Peer {
             } else {
               pending.reject(new RpcError(status.code, status.message))
             }
+          } else if (packet.kind === FrameKind.RST_STREAM) {
+            this.pendingCalls.delete(packet.streamId)
+            pending.reject(new RpcError(StatusCode.CANCELLED, 'Stream reset by peer'))
           }
         }
       } catch (err) {
@@ -261,6 +265,25 @@ export class Peer {
 
     // Ensure the processing loop is running
     this.ensureLoop()
+
+    // Apply timeout if :timeout metadata is set
+    const timeoutStr = call.metadata[':timeout']
+    if (timeoutStr) {
+      const timeoutMs = parseInt(timeoutStr, 10)
+      if (timeoutMs > 0) {
+        let timer: ReturnType<typeof setTimeout>
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            this.pendingCalls.delete(streamId)
+            this.sendQueue.push(encodePacket(rstStreamPacket(streamId, StatusCode.CANCELLED)))
+            reject(new RpcError(StatusCode.DEADLINE_EXCEEDED, 'Deadline exceeded'))
+          }, timeoutMs)
+        })
+        return Promise.race([resultPromise, timeoutPromise]).finally(() => {
+          clearTimeout(timer)
+        })
+      }
+    }
 
     // Wait for response from processing loop
     return resultPromise

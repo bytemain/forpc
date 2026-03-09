@@ -336,3 +336,51 @@ test('sequential calls after concurrent batch', async (t) => {
   t.deepEqual(batch2[1], Buffer.from('batch2-b'))
   t.deepEqual(batch2[2], Buffer.from('batch2-c'))
 })
+
+// --- Tests for timeout/deadline enforcement ---
+
+test('callRaw with :timeout metadata triggers DEADLINE_EXCEEDED on slow handler', async (t) => {
+  const url = `inproc://rpc_timeout_${process.pid}_${Date.now()}`
+
+  const server = await RawServer.bind(url)
+  server.register('Test/Slow', async () => {
+    // Simulate slow handler
+    await new Promise((resolve) => setTimeout(resolve, 5000))
+    return Buffer.from('late')
+  })
+  server.serve()
+
+  const peer = await Peer.connect(url)
+
+  t.teardown(() => {
+    peer.close()
+    server.close()
+  })
+
+  const err = await t.throwsAsync(() =>
+    peer.callRaw('Test/Slow', Buffer.from('hello'), { ':timeout': '100' }),
+  )
+  t.truthy(err)
+  t.true(err instanceof RpcError)
+  if (err instanceof RpcError) {
+    t.is(err.code, 4) // DEADLINE_EXCEEDED
+  }
+})
+
+test('callRaw completes before timeout', async (t) => {
+  const url = `inproc://rpc_timeout_ok_${process.pid}_${Date.now()}`
+
+  const server = await RawServer.bind(url)
+  server.register('Raw/Echo', (payload) => Buffer.from(payload))
+  server.serve()
+
+  const peer = await Peer.connect(url)
+
+  t.teardown(() => {
+    peer.close()
+    server.close()
+  })
+
+  const resp = await peer.callRaw('Raw/Echo', Buffer.from('fast'), { ':timeout': '5000' })
+  t.deepEqual(resp, Buffer.from('fast'))
+})
