@@ -8,6 +8,7 @@ pub mod frame_kind {
     pub const HEADERS: u8 = 0;
     pub const DATA: u8 = 1;
     pub const TRAILERS: u8 = 2;
+    pub const RST_STREAM: u8 = 3;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,6 +55,16 @@ impl Packet {
             stream_id,
             kind: frame_kind::TRAILERS,
             payload: Bytes::from(status.encode_to_vec()),
+        }
+    }
+
+    pub fn rst_stream(stream_id: u32, error_code: u32) -> Self {
+        let mut buf = BytesMut::with_capacity(4);
+        buf.put_u32(error_code);
+        Self {
+            stream_id,
+            kind: frame_kind::RST_STREAM,
+            payload: buf.freeze(),
         }
     }
     

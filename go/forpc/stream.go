@@ -1,6 +1,7 @@
 package forpc
 
 import (
+	"encoding/binary"
 	"errors"
 	"sync"
 
@@ -73,4 +74,13 @@ func (s *BidiStream[Req, Resp]) CloseSend() error {
 		return err
 	}
 	return s.peer.sendPacket(Packet{StreamID: s.streamID, Kind: FrameTrailers, Payload: payload})
+}
+
+// Cancel sends a RST_STREAM frame to the remote peer, signaling cancellation.
+// This removes the pending call and notifies the server to stop processing.
+func (s *BidiStream[Req, Resp]) Cancel() {
+	s.peer.removePending(s.streamID)
+	payload := make([]byte, 4)
+	binary.BigEndian.PutUint32(payload, uint32(pb.StatusCode_CANCELLED))
+	_ = s.peer.sendPacket(Packet{StreamID: s.streamID, Kind: FrameRstStream, Payload: payload})
 }

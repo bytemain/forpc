@@ -1,6 +1,8 @@
 package forpc
 
 import (
+	"context"
+	"encoding/binary"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -19,6 +21,7 @@ type Request struct {
 	Payload  []byte
 	Stream   <-chan Packet
 	StreamID uint32
+	Ctx      context.Context
 }
 
 type Response struct {
@@ -65,6 +68,9 @@ type RpcPeer struct {
 	inboundMu sync.Mutex
 	inbound   map[uint32]*inboundState
 
+	cancelsMu sync.Mutex
+	cancels   map[uint32]context.CancelFunc
+
 	nextStreamID atomic.Uint32
 	isInitiator  bool
 
@@ -93,6 +99,7 @@ func NewPeer(t transport.Transport, isInitiator bool) *RpcPeer {
 		handlers:    make(map[string]handlerFunc),
 		pending:     make(map[uint32]*pendingCall),
 		inbound:     make(map[uint32]*inboundState),
+		cancels:     make(map[uint32]context.CancelFunc),
 		isInitiator: isInitiator,
 	}
 	if isInitiator {
@@ -191,6 +198,7 @@ func (p *RpcPeer) unaryRawWithMetadata(method string, meta map[string]string, pa
 			return res.b, nil
 		case <-timeoutCh:
 			p.removePending(streamID)
+			p.sendRstStream(streamID, uint32(pb.StatusCode_CANCELLED))
 			return nil, NewRpcError(pb.StatusCode_DEADLINE_EXCEEDED, "Deadline exceeded")
 		}
 	}
@@ -275,10 +283,14 @@ func (p *RpcPeer) handleInbound(pkt Packet) error {
 			_ = p.sendResponse(pkt.StreamID, ResponseError(pb.StatusCode_UNIMPLEMENTED, "method not found"))
 			return nil
 		}
+		ctx, cancel := context.WithCancel(context.Background())
 		rx := make(chan Packet, 32)
 		p.inboundMu.Lock()
 		p.inbound[pkt.StreamID] = &inboundState{tx: rx}
 		p.inboundMu.Unlock()
+		p.cancelsMu.Lock()
+		p.cancels[pkt.StreamID] = cancel
+		p.cancelsMu.Unlock()
 
 		req := Request{
 			Method:   call.Method,
@@ -286,12 +298,33 @@ func (p *RpcPeer) handleInbound(pkt Packet) error {
 			Payload:  nil,
 			Stream:   rx,
 			StreamID: pkt.StreamID,
+			Ctx:      ctx,
 		}
 
 		go func() {
 			resp := h(req, p)
+			// Clean up cancel function after handler completes
+			p.cancelsMu.Lock()
+			delete(p.cancels, pkt.StreamID)
+			p.cancelsMu.Unlock()
 			_ = p.sendResponse(pkt.StreamID, resp)
 		}()
+
+	case FrameRstStream:
+		p.cancelsMu.Lock()
+		cancelFn := p.cancels[pkt.StreamID]
+		delete(p.cancels, pkt.StreamID)
+		p.cancelsMu.Unlock()
+		if cancelFn != nil {
+			cancelFn()
+		}
+		p.inboundMu.Lock()
+		st := p.inbound[pkt.StreamID]
+		delete(p.inbound, pkt.StreamID)
+		p.inboundMu.Unlock()
+		if st != nil {
+			close(st.tx)
+		}
 
 	case FrameData, FrameTrailers:
 		p.inboundMu.Lock()
@@ -351,6 +384,15 @@ func (p *RpcPeer) handleOutbound(pkt Packet) error {
 		} else {
 			pc.unaryCh <- resultBytes{b: nil, err: NewRpcError(st.Code, st.Message)}
 		}
+	case FrameRstStream:
+		delete(p.pending, pkt.StreamID)
+		p.pendingMu.Unlock()
+		if pc.unaryCh != nil {
+			pc.unaryCh <- resultBytes{b: nil, err: NewRpcError(pb.StatusCode_CANCELLED, "Stream reset by peer")}
+		}
+		if pc.streamCh != nil {
+			close(pc.streamCh)
+		}
 	default:
 		p.pendingMu.Unlock()
 	}
@@ -377,6 +419,12 @@ func (p *RpcPeer) sendPacket(pkt Packet) error {
 		return err
 	}
 	return p.transport.Send(b)
+}
+
+func (p *RpcPeer) sendRstStream(streamID uint32, errorCode uint32) {
+	payload := make([]byte, 4)
+	binary.BigEndian.PutUint32(payload, errorCode)
+	_ = p.sendPacket(Packet{StreamID: streamID, Kind: FrameRstStream, Payload: payload})
 }
 
 func (p *RpcPeer) allocStreamID() uint32 {

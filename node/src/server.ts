@@ -25,7 +25,7 @@ import {
 
 import type { MessageType, ServiceDefinition } from './peer.ts'
 
-export type RawHandler = (payload: Buffer, metadata: Record<string, string>) => Buffer | Promise<Buffer>
+export type RawHandler = (payload: Buffer, metadata: Record<string, string>, signal: AbortSignal) => Buffer | Promise<Buffer>
 
 /**
  * Typed unary handler for protobuf-based services.
@@ -36,6 +36,7 @@ export type RawHandler = (payload: Buffer, metadata: Record<string, string>) => 
 export type UnaryHandler<Req = object, Resp = object> = (
   request: Req,
   metadata: Record<string, string>,
+  signal: AbortSignal,
 ) => Resp | Promise<Resp>
 
 /**
@@ -60,6 +61,7 @@ interface StreamState {
   metadata: Record<string, string>
   routerMsg: RouterMessage
   data?: Buffer
+  abortController: AbortController
 }
 
 /**
@@ -149,9 +151,9 @@ export class RawServer {
     responseType: MessageType<Resp>,
     handler: UnaryHandler<Req, Resp>,
   ): void {
-    this.handlers.set(method, async (payload: Buffer, metadata: Record<string, string>) => {
+    this.handlers.set(method, async (payload: Buffer, metadata: Record<string, string>, signal: AbortSignal) => {
       const request = requestType.decode(payload)
-      const response = await handler(request, metadata)
+      const response = await handler(request, metadata, signal)
       const respMsg = responseType.create(response)
       return Buffer.from(responseType.encode(respMsg).finish())
     })
@@ -246,6 +248,7 @@ export class RawServer {
           method: call.method,
           metadata: call.metadata,
           routerMsg,
+          abortController: new AbortController(),
         })
         break
       }
@@ -256,6 +259,15 @@ export class RawServer {
           // Update routerMsg to latest for routing
           stream.routerMsg = routerMsg
         }
+        break
+      }
+      case FrameKind.RST_STREAM: {
+        // Client cancelled the stream — abort the signal and clean up state
+        const stream = this.streams.get(packet.streamId)
+        if (stream) {
+          stream.abortController.abort(new Error('Stream cancelled by peer'))
+        }
+        this.streams.delete(packet.streamId)
         break
       }
       case FrameKind.TRAILERS: {
@@ -278,7 +290,7 @@ export class RawServer {
         }
 
         try {
-          const result = await handler(stream.data || Buffer.alloc(0), stream.metadata)
+          const result = await handler(stream.data || Buffer.alloc(0), stream.metadata, stream.abortController.signal)
 
           // Send DATA response
           const respData = dataPacket(packet.streamId, result)

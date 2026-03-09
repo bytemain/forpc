@@ -8,9 +8,10 @@ import (
 )
 
 const (
-	FrameHeaders  uint8 = 0
-	FrameData     uint8 = 1
-	FrameTrailers uint8 = 2
+	FrameHeaders   uint8 = 0
+	FrameData      uint8 = 1
+	FrameTrailers  uint8 = 2
+	FrameRstStream uint8 = 3
 )
 
 type Packet struct {
