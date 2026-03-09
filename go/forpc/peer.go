@@ -451,7 +451,8 @@ func (p *RpcPeer) sendPacket(pkt Packet) error {
 }
 
 // sendPackets encodes multiple packets into a single batch buffer and sends
-// them as one transport write, reducing syscalls.
+// them as one transport write, reducing syscalls. When there is only one
+// packet it is encoded normally without batch overhead.
 func (p *RpcPeer) sendPackets(packets []Packet) error {
 	b, err := EncodeBatch(packets)
 	if err != nil {
