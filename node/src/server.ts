@@ -16,7 +16,8 @@ import {
   StatusCode,
   FrameKind,
   encodePacket,
-  decodePacket,
+  encodePacketBatch,
+  decodePackets,
   dataPacket,
   trailersPacket,
   statusOk,
@@ -220,10 +221,12 @@ export class RawServer {
           const body = msg.body()
           if (body.length < 5) continue
 
-          const packet = decodePacket(body)
-          if (packet.streamId === 0) continue
-
-          await this.handlePacket(packet, msg)
+          // Decode single packet or batch of packets
+          const packets = decodePackets(body)
+          for (const packet of packets) {
+            if (packet.streamId === 0) continue
+            await this.handlePacket(packet, msg)
+          }
         } catch (err) {
           if (this.running) {
             this.running = false
@@ -292,17 +295,13 @@ export class RawServer {
         try {
           const result = await handler(stream.data || Buffer.alloc(0), stream.metadata, stream.abortController.signal)
 
-          // Send DATA response
-          const respData = dataPacket(packet.streamId, result)
-          const encodedData = encodePacket(respData)
-          const dataResponse = responseMsg.createResponse(encodedData)
-          await this.router.send(dataResponse)
-
-          // Send TRAILERS (OK)
-          const respTrailers = trailersPacket(packet.streamId, statusOk())
-          const encodedTrailers = encodePacket(respTrailers)
-          const trailersResponse = responseMsg.createResponse(encodedTrailers)
-          await this.router.send(trailersResponse)
+          // Batch DATA + TRAILERS into a single transport write
+          const batchBuf = encodePacketBatch([
+            dataPacket(packet.streamId, result),
+            trailersPacket(packet.streamId, statusOk()),
+          ])
+          const batchResponse = responseMsg.createResponse(batchBuf)
+          await this.router.send(batchResponse)
         } catch (err) {
           await this.sendError(responseMsg, packet.streamId, StatusCode.INTERNAL, String(err))
         }
