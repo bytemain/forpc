@@ -2,7 +2,7 @@ use std::env;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use forpc::{Request, Response, RpcListener, RpcPeer, StatusCode};
+use forpc::{RpcListener, RpcPeer, RpcResult};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -14,21 +14,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let listener = RpcListener::bind(&url).await?;
     let peer = listener.accept().await?;
 
-    peer.register("Raw/Echo", |req: Request, _peer: Arc<RpcPeer>| async move {
-        let mut payload = Bytes::new();
-        if let Some(mut rx) = req.stream {
-            while let Some(packet) = rx.recv().await {
-                if packet.kind == 1 {
-                    payload = packet.payload;
-                } else if packet.kind == 2 {
-                    break;
-                }
-            }
-        }
-        if payload.is_empty() {
-            return Response::error_with_code(StatusCode::InvalidArgument, "Missing payload");
-        }
-        Response::ok(payload)
+    peer.register_raw("Raw/Echo", |payload: Bytes, _meta, _peer: Arc<RpcPeer>| async move {
+        Ok(payload) as RpcResult<Bytes>
     })
     .await;
 
