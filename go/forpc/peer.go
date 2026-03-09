@@ -24,6 +24,29 @@ type Request struct {
 	Ctx      context.Context
 }
 
+// ReadPayload returns the request payload bytes. If Payload is already
+// populated it is returned directly. Otherwise the method drains the
+// Stream channel, returning the last DATA frame payload and discarding
+// protocol frames so callers do not need to understand the frame structure.
+// For unary calls the protocol sends a single DATA frame, so this returns
+// that frame's payload. If multiple DATA frames are present, only the
+// last one is kept.
+func (r *Request) ReadPayload() []byte {
+	if r.Payload != nil {
+		return r.Payload
+	}
+	if r.Stream == nil {
+		return nil
+	}
+	var payload []byte
+	for pkt := range r.Stream {
+		if pkt.Kind == FrameData {
+			payload = pkt.Payload
+		}
+	}
+	return payload
+}
+
 type Response struct {
 	Metadata map[string]string
 	Payload  []byte

@@ -7,18 +7,24 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// RegisterRaw registers a handler that receives the raw payload bytes
+// without any deserialization, so callers do not need to understand the
+// underlying frame structure. The handler receives the payload, request
+// metadata, and the peer, and returns response bytes or an error.
+func RegisterRaw(peer *RpcPeer, method string, h func([]byte, map[string]string, *RpcPeer) ([]byte, *RpcError)) {
+	peer.Register(method, func(r Request, p *RpcPeer) Response {
+		payload := r.ReadPayload()
+		resp, rpcErr := h(payload, r.Metadata, p)
+		if rpcErr != nil {
+			return Response{Metadata: map[string]string{}, Payload: nil, Status: Status{Code: rpcErr.Code, Message: rpcErr.Message}}
+		}
+		return ResponseOK(resp)
+	})
+}
+
 func RegisterUnary[Req any, Resp any](peer *RpcPeer, method string, h func(*Req, map[string]string, *RpcPeer) (*Resp, *RpcError)) {
 	peer.Register(method, func(r Request, p *RpcPeer) Response {
-		var payload []byte
-		if r.Payload != nil {
-			payload = r.Payload
-		} else if r.Stream != nil {
-			for pkt := range r.Stream {
-				if pkt.Kind == FrameData {
-					payload = pkt.Payload
-				}
-			}
-		}
+		payload := r.ReadPayload()
 		if len(payload) == 0 {
 			return ResponseError(pb.StatusCode_INVALID_ARGUMENT, "missing payload")
 		}

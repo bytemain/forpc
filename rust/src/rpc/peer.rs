@@ -49,6 +49,29 @@ pub struct Request {
     pub cancel_token: CancellationToken,
 }
 
+impl Request {
+    /// Returns the request payload bytes. If `payload` is already populated it
+    /// is returned directly. Otherwise the method drains the `stream` channel,
+    /// returning the last DATA frame payload and discarding protocol frames so
+    /// callers do not need to understand the frame structure. For unary calls
+    /// the protocol sends a single DATA frame, so this returns that frame's
+    /// payload. If multiple DATA frames are present, only the last one is kept.
+    pub async fn read_payload(&mut self) -> Bytes {
+        if let Some(p) = self.payload.take() {
+            return p;
+        }
+        let mut payload = Bytes::new();
+        if let Some(mut rx) = self.stream.take() {
+            while let Some(packet) = rx.recv().await {
+                if packet.kind == frame_kind::DATA {
+                    payload = packet.payload;
+                }
+            }
+        }
+        payload
+    }
+}
+
 pub struct Response {
     pub metadata: HashMap<String, String>,
     pub payload: Option<Bytes>,
@@ -154,6 +177,31 @@ impl RpcPeer {
         let mut handlers = self.handlers.write().await;
         handlers.insert(method.to_string(), Arc::new(handler));
     }
+
+    /// Register a raw handler that receives payload bytes without any
+    /// deserialization, so callers do not need to understand the underlying
+    /// frame structure. The handler receives the payload, request metadata,
+    /// and the peer, and returns response bytes or an error.
+    pub async fn register_raw<F, Fut>(&self, method: &str, handler: F)
+    where
+        F: Fn(Bytes, HashMap<String, String>, Arc<RpcPeer>) -> Fut + Send + Sync + Clone + 'static,
+        Fut: Future<Output = RpcResult<Bytes>> + Send + 'static,
+    {
+        self.register(method, move |mut req: Request, peer: Arc<RpcPeer>| {
+            let handler = handler.clone();
+
+            async move {
+                let payload = req.read_payload().await;
+                match handler(payload, req.metadata, peer).await {
+                    Ok(resp) => Response::ok(resp),
+                    Err(e) => {
+                        let code = StatusCode::try_from(e.code).unwrap_or(StatusCode::Unknown);
+                        Response::error_with_code(code, e.message)
+                    }
+                }
+            }
+        }).await;
+    }
     
     pub async fn register_unary<Req, Resp, F, Fut>(&self, method: &str, handler: F)
     where
@@ -162,20 +210,11 @@ impl RpcPeer {
         F: Fn(Req, HashMap<String, String>, Arc<RpcPeer>) -> Fut + Send + Sync + Clone + 'static,
         Fut: Future<Output = RpcResult<Resp>> + Send + 'static,
     {
-        self.register(method, move |req: Request, peer: Arc<RpcPeer>| {
+        self.register(method, move |mut req: Request, peer: Arc<RpcPeer>| {
             let handler = handler.clone();
             
             async move {
-                let mut payload = Bytes::new();
-                if let Some(mut rx) = req.stream {
-                    while let Some(packet) = rx.recv().await {
-                        if packet.kind == frame_kind::DATA {
-                            payload = packet.payload;
-                        }
-                    }
-                } else if let Some(p) = req.payload {
-                    payload = p;
-                }
+                let payload = req.read_payload().await;
 
                 if payload.is_empty() {
                     return Response::error_with_code(StatusCode::InvalidArgument, "Missing payload");
@@ -890,5 +929,73 @@ mod tests {
         // Wait for cancellation to propagate
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         assert!(cancel_observed.load(Ordering::SeqCst), "Server handler should have observed stream cancellation");
+    }
+
+    #[tokio::test]
+    async fn read_payload_from_direct_field() {
+        let mut req = Request {
+            method: String::new(),
+            metadata: HashMap::new(),
+            payload: Some(Bytes::from_static(b"direct")),
+            stream: None,
+            stream_id: 0,
+            cancel_token: CancellationToken::new(),
+        };
+        let p = req.read_payload().await;
+        assert_eq!(p, Bytes::from_static(b"direct"));
+    }
+
+    #[tokio::test]
+    async fn read_payload_from_stream() {
+        let (tx, rx) = mpsc::channel(4);
+        tx.send(Packet::data(1, Bytes::from_static(b"from-stream"))).await.unwrap();
+        tx.send(Packet::trailers(1, &Status::ok())).await.unwrap();
+        drop(tx);
+
+        let mut req = Request {
+            method: String::new(),
+            metadata: HashMap::new(),
+            payload: None,
+            stream: Some(rx),
+            stream_id: 1,
+            cancel_token: CancellationToken::new(),
+        };
+        let p = req.read_payload().await;
+        assert_eq!(p, Bytes::from_static(b"from-stream"));
+    }
+
+    #[tokio::test]
+    async fn read_payload_empty() {
+        let mut req = Request {
+            method: String::new(),
+            metadata: HashMap::new(),
+            payload: None,
+            stream: None,
+            stream_id: 0,
+            cancel_token: CancellationToken::new(),
+        };
+        let p = req.read_payload().await;
+        assert!(p.is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn register_raw_echo() {
+        let (ta, tb) = ChannelTransport::pair(256);
+        let a = Arc::new(RpcPeer::new(ta, true));
+        let b = Arc::new(RpcPeer::new(tb, false));
+
+        b.register_raw("Raw/Echo", |payload: Bytes, _meta, _peer| async move {
+            Ok(payload)
+        })
+        .await;
+
+        let _a_task = spawn_peer(a.clone()).await;
+        let _b_task = spawn_peer(b.clone()).await;
+
+        let resp = a
+            .call_raw("Raw/Echo", Bytes::from_static(b"Hello Raw"))
+            .await
+            .unwrap();
+        assert_eq!(resp, Bytes::from_static(b"Hello Raw"));
     }
 }

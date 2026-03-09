@@ -331,6 +331,82 @@ func TestRstStreamPacketRoundtrip(t *testing.T) {
 	}
 }
 
+func TestReadPayload(t *testing.T) {
+	// ReadPayload with Payload already set returns it directly.
+	r := &Request{Payload: []byte("direct")}
+	if got := r.ReadPayload(); string(got) != "direct" {
+		t.Fatalf("expected 'direct', got %q", got)
+	}
+
+	// ReadPayload with no Stream and nil Payload returns nil.
+	r2 := &Request{}
+	if got := r2.ReadPayload(); got != nil {
+		t.Fatalf("expected nil, got %v", got)
+	}
+
+	// ReadPayload extracts DATA frame from Stream channel.
+	ch := make(chan Packet, 2)
+	ch <- Packet{Kind: FrameData, Payload: []byte("from-stream")}
+	ch <- Packet{Kind: FrameTrailers, Payload: []byte{}}
+	close(ch)
+	r3 := &Request{Stream: ch}
+	if got := r3.ReadPayload(); string(got) != "from-stream" {
+		t.Fatalf("expected 'from-stream', got %q", got)
+	}
+}
+
+func TestRegisterRawInproc(t *testing.T) {
+	url := "inproc://forpc_go_raw"
+
+	l, err := Bind(url)
+	if err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+	defer l.Close()
+
+	go func() {
+		p, err := l.Accept()
+		if err != nil {
+			return
+		}
+
+		RegisterRaw(p, "Raw/Echo", func(payload []byte, _ map[string]string, _ *RpcPeer) ([]byte, *RpcError) {
+			return payload, nil
+		})
+
+		_ = p.Serve()
+	}()
+
+	c, err := ConnectWithRetry(url, 10)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer c.Close()
+
+	go func() { _ = c.Serve() }()
+
+	type result struct {
+		resp []byte
+		err  error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		resp, err := c.CallRaw("Raw/Echo", []byte("Hello Raw"))
+		ch <- result{resp: resp, err: err}
+	}()
+	select {
+	case r := <-ch:
+		if r.err != nil {
+			t.Fatalf("call: %v", r.err)
+		}
+		if string(r.resp) != "Hello Raw" {
+			t.Fatalf("unexpected resp: %q", string(r.resp))
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("call timeout")
+	}
+}
+
 func TestBidiStreamCancel(t *testing.T) {
 	url := "inproc://forpc_go_bidi_cancel"
 
