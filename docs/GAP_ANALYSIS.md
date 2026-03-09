@@ -1,7 +1,8 @@
 # forpc 与主流 Peer RPC 框架差距分析
 
-> **日期**: 2026-03-05
+> **日期**: 2026-03-09（更新）
 > **范围**: 将 forpc 与 gRPC、Cap'n Proto、Tarpc、DRPC、ConnectRPC、vscode-jsonrpc 等主流 RPC 框架进行对比，识别功能差距并给出优先级建议。
+> **上次更新**: 合并 master 后重新分析——超时执行、RST_STREAM 取消已实现。
 
 ---
 
@@ -18,11 +19,14 @@ forpc 是一个基于 NNG 传输、使用 Protocol Buffers 做序列化的轻量
 | Raw 调用 | ✅ 已实现 | 不做 protobuf 编解码，直接传 bytes |
 | 跨语言互通 | ✅ 已实现 | Rust ↔ Go ↔ Node.js 全矩阵测试 |
 | Metadata 元数据 | ✅ 已实现 | 请求头键值对 `map<string, string>` |
-| gRPC 兼容状态码 | ✅ 已实现 | 16 种标准状态码 |
+| gRPC 兼容状态码 | ✅ 已实现 | 17 种标准状态码（protobuf enum） |
 | 多传输协议 | ✅ 已实现 | TCP / IPC / inproc |
 | 连接重试 | ✅ 已实现 | `connect_with_retry` / `ConnectWithRetry` |
 | Protobuf 代码生成 | ✅ 已实现 | Rust prost_build / Go protoc / Node pbjs |
 | 对等通信 | ✅ 已实现 | 连接双方均可主动发起调用（核心差异化特性） |
+| 超时/Deadline 执行 | ✅ 已实现 | `:timeout` metadata → 超时返回 `DEADLINE_EXCEEDED` + RST_STREAM |
+| 请求取消（RST_STREAM） | ✅ 已实现 | RST_STREAM 帧(kind=3) + CancellationToken(Rust) / context.Context(Go) / AbortSignal(Node) |
+| 流取消（BidiStream.cancel） | ✅ 已实现 | 流式调用可主动取消，对端通过 token/context/signal 感知 |
 
 ---
 
@@ -39,9 +43,9 @@ forpc 是一个基于 NNG 传输、使用 Protocol Buffers 做序列化的轻量
 | Bidi Streaming | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ |
 | 对等双向调用 | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ |
 | **可靠性** | | | | | | | |
-| 超时/Deadline 执行 | ❌ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| 超时/Deadline 执行 | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Deadline 传播 | ❌ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
-| 请求取消 | ⚠️ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 请求取消 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 自动重试策略 | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | 连接 Keepalive | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | 健康检查 | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -76,33 +80,23 @@ forpc 是一个基于 NNG 传输、使用 Protocol Buffers 做序列化的轻量
 
 ## 3. 关键差距详细分析
 
-### 3.1 超时/Deadline 执行（高优先级）
+### 3.1 ~~超时/Deadline 执行~~ ✅ 已实现
 
-**现状**：`Call` 结构体中已定义 `:timeout` 元数据键和 `timeout_ms()` 解析方法，但运行时**完全不执行**超时。调用方会无限阻塞等待响应。
+**已实现**（PR #35）：`:timeout` metadata 现在在三端均被执行。
+- Rust：`tokio::time::timeout()` 包裹响应等待，超时返回 `DEADLINE_EXCEEDED` 并发送 RST_STREAM
+- Go：`select` + `time.After()` 超时控制，超时发送 RST_STREAM
+- Node：`Promise.race()` + `setTimeout()`，超时发送 RST_STREAM
 
-**gRPC 的做法**：
-- 客户端设置 deadline，自动传播到下游服务
-- 超时后自动返回 `DEADLINE_EXCEEDED` 错误
-- 服务端可检查剩余时间，提前终止耗时操作
+**仍未实现**：Deadline 传播（将剩余时间向下游服务传递，类似 gRPC 的 deadline propagation）。
 
-**建议**：
-- Rust：在 `call()` 中用 `tokio::time::timeout()` 包裹响应等待
-- Go：在 `Call()` 中使用 `context.WithTimeout()` + `select` 超时控制
-- Node：使用 `Promise.race()` 或 `AbortSignal.timeout()`（需 Node.js >= 17.3）
+### 3.2 ~~请求取消~~ ✅ 已实现
 
-### 3.2 请求取消（高优先级）
+**已实现**（PR #40）：RST_STREAM 帧（kind=3）支持跨 Peer 取消传播。
+- Rust：`CancellationToken` 注入 handler 的 `Request`，收到 RST_STREAM 时 cancel。`BidiStream::cancel()` 主动发送 RST_STREAM。
+- Go：`context.Context` 注入 handler，收到 RST_STREAM 时 `cancelFn()` 取消 context。`BidiStream.Cancel()` 发送 RST_STREAM。
+- Node：服务端 handler 收到 `AbortSignal`（第 3 参数），RST_STREAM 触发 abort。超时时自动发送 RST_STREAM。
 
-**现状**：Rust 中通过 drop oneshot receiver 实现隐式取消，Go 中**完全没有**取消机制。两端均不会向对端发送取消信号。
-
-**gRPC 的做法**：
-- 客户端可主动发送 `RST_STREAM` 取消请求
-- 服务端通过 context 感知取消，停止处理
-- 取消自动传播到下游调用链
-
-**建议**：
-- 新增 `CANCEL` 帧类型（或复用 TRAILERS + CANCELLED 状态码）
-- Rust：通过 `CancellationToken` 向 handler 传播取消信号
-- Go：通过 `context.Context` 传播取消
+**仍未实现**：取消向下游自动传播（类似 gRPC 的 cancellation propagation chain）。
 
 ### 3.3 拦截器/中间件（高优先级）
 
@@ -220,7 +214,7 @@ peer.add_interceptor(|req, next| Box::pin(async move {
 | **轻量级** | 无需 HTTP/2 协议栈，NNG 传输层开销极小 |
 | **IPC 优化** | 专为本地进程间通信设计，避免网络栈开销 |
 | **三语言统一协议** | Rust/Go/Node.js 使用完全相同的线路格式（wire format） |
-| **简单易懂** | 协议设计清晰（3 种帧类型），容易理解和调试 |
+| **简单易懂** | 协议设计清晰（4 种帧类型：HEADERS/DATA/TRAILERS/RST_STREAM），容易理解和调试 |
 
 ---
 
@@ -228,10 +222,13 @@ peer.add_interceptor(|req, next| Box::pin(async move {
 
 根据**对使用者的影响**和**实现复杂度**排序：
 
+### ✅ 已完成
+
+- [x] **超时/Deadline 执行**（PR #35）：`:timeout` metadata 三端执行，超时返回 `DEADLINE_EXCEEDED` + RST_STREAM
+- [x] **请求取消与传播**（PR #40）：RST_STREAM(kind=3)，Rust CancellationToken / Go context.Context / Node AbortSignal
+
 ### P0 — 基础可用性（必须优先实现）
 
-- [ ] **超时/Deadline 执行**：调用必须有超时保护，否则一个慢调用可能阻塞整个系统
-- [ ] **请求取消与传播**：调用方能取消等待中的调用，服务端能感知取消
 - [ ] **拦截器/中间件框架**：没有拦截器，日志/鉴权/追踪等基础需求无法优雅实现
 
 ### P1 — 开发体验（提升框架竞争力）
@@ -268,7 +265,7 @@ peer.add_interceptor(|req, next| Box::pin(async move {
 | 生态 | — | 10+ 语言、海量工具、云原生集成 |
 | 企业特性 | — | 拦截器、安全、可观测性、负载均衡 |
 
-**结论**：forpc 的对等通信是核心差异化点。应优先补齐 gRPC 的基础可靠性特性（超时、取消、拦截器），而非追求 gRPC 的全部企业级功能。
+**结论**：forpc 的对等通信是核心差异化点。超时和取消已补齐，下一步应实现拦截器框架，以支持日志/鉴权/追踪等横切关注点。
 
 ### vs Cap'n Proto
 
@@ -305,10 +302,25 @@ peer.add_interceptor(|req, next| Box::pin(async move {
 
 ## 7. 总结
 
-forpc 在**对等通信**和**跨语言互通**两个方面具有独特优势，但在可靠性（超时、取消）、可扩展性（拦截器、代码生成）和生产就绪（健康检查、压缩、流控）方面与主流框架有明显差距。
+forpc 在**对等通信**和**跨语言互通**两个方面具有独特优势。经过最近的迭代（PR #35, #40），**超时执行**和 **RST_STREAM 请求取消**已经实现，P0 中仅剩**拦截器/中间件框架**待补齐。
+
+**当前状态一览**：
+| 优先级 | 特性 | 状态 |
+|--------|------|------|
+| ~P0~ | 超时/Deadline 执行 | ✅ 已实现 |
+| ~P0~ | 请求取消（RST_STREAM） | ✅ 已实现 |
+| **P0** | 拦截器/中间件框架 | ❌ 待实现 |
+| P1 | Proto 服务代码生成 | ❌ 待实现 |
+| P1 | 类型安全 Streaming API | ⚠️ Rust/Go 有 BidiStream，Node 仅 unary |
+| P1 | 错误模型 | ⚠️ StatusCode 已有，RichErrorModel 未实现 |
+| P2 | 流控/背压 | ❌ 待实现（Streaming 场景） |
+| P2 | 优雅关闭 (GOAWAY) | ❌ 待实现 |
+| P2 | 消息压缩 | ❌ 待实现 |
+| P2 | Keepalive/健康检查 | ❌ 待实现（TCP 远程场景） |
+| P3 | TLS、OpenTelemetry、重试、负载均衡 | ❌ 长期目标 |
 
 **核心建议**：
-1. 围绕**对等 RPC** 这一差异化定位，补齐基础可靠性能力
-2. 优先实现**超时、取消、拦截器**三大特性（P0）
-3. 尽快提供 **Proto 服务代码生成**，大幅降低使用门槛（P1）
+1. 围绕**对等 RPC** 这一差异化定位，继续补齐基础能力
+2. 下一步优先实现**拦截器/中间件框架**（P0），这是日志/鉴权/追踪的前提
+3. 然后推进 **Proto 服务代码生成**（P1），大幅降低使用门槛
 4. 在协议设计上保持简洁，不追求 gRPC/Cap'n Proto 的全部复杂度

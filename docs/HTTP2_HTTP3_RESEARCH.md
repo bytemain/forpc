@@ -1,7 +1,8 @@
 # HTTP/2 与 HTTP/3 协议思路融合到 forpc 的研究
 
-> **日期**: 2026-03-06
+> **日期**: 2026-03-09（更新）
 > **范围**: 调研 HTTP/2 和 HTTP/3 (QUIC) 协议中值得借鉴的设计思路，分析如何将这些机制融合到 forpc RPC 框架中。
+> **上次更新**: 合并 master 后重新分析——RST_STREAM 取消已实现，帧类型更新为 4 种。
 
 ---
 
@@ -30,10 +31,11 @@ forpc 帧格式：
 │ (4 bytes BE) │(1 byte)│ (variable length) │
 └──────────────┴────────┴───────────────────┘
 
-3 种帧类型（类似 gRPC over HTTP/2）：
-  HEADERS  (0) → protobuf 编码的 Call{method, metadata}
-  DATA     (1) → 原始 payload 字节
-  TRAILERS (2) → protobuf 编码的 Status{code, message}
+4 种帧类型：
+  HEADERS     (0) → protobuf 编码的 Call{method, metadata}
+  DATA        (1) → 原始 payload 字节
+  TRAILERS    (2) → protobuf 编码的 Status{code, message}
+  RST_STREAM  (3) → error_code (u32 BE)，取消传播
 ```
 
 ### 1.2 Stream 多路复用
@@ -49,7 +51,7 @@ forpc 帧格式：
 |------|-------------|---------------|
 | 流控（Flow Control） | ✅ TCP 滑动窗口（连接级） | ⚠️ per-Stream 级流控（Streaming 场景才需要） |
 | 连接活性检测 | ✅ TCP keepalive（默认探测慢）；IPC 场景进程崩溃时 OS 即时通知 | ⚠️ 秒级 PING/PONG（仅 TCP 远程场景需要） |
-| 调用取消 | ❌ | ✅ RST_STREAM 帧，传播取消到对端 |
+| 调用取消 | ❌ | ✅ **已实现**（PR #40）：RST_STREAM(kind=3) + CancellationToken / context.Context / AbortSignal |
 | 优雅关闭 | ❌ | ✅ GOAWAY 帧，排空 in-flight 调用后关闭 |
 | 参数协商 | ❌ | ✅ SETTINGS 帧，协商并发数/窗口等 |
 | 头部压缩 | ❌ | ⚠️ 简化版 HPACK（IPC 场景带宽充裕，优先级低） |
@@ -142,9 +144,13 @@ Client                                 Server
 - Server 的 `Context.Done()` channel 立即关闭 → handler 可以感知取消
 - 资源（数据库连接、计算任务等）及时释放
 
-**forpc 借鉴价值**：⭐⭐⭐⭐⭐（最高优先级）
+**forpc 借鉴价值**：⭐⭐⭐⭐⭐ → ✅ **已实现**
 
-forpc 当前缺少取消传播。GAP_ANALYSIS.md 中已识别这是 P0 优先级的差距。
+forpc 已在 PR #40 中实现了 RST_STREAM(kind=3)。实现细节：
+- Rust：`CancellationToken` 注入 handler Request，收到 RST_STREAM 时 cancel；`BidiStream::cancel()` 主动发送
+- Go：`context.Context` 注入 handler，收到 RST_STREAM 时调用 `cancelFn()`；`BidiStream.Cancel()` 主动发送
+- Node：handler 收到 `AbortSignal`（第 3 参数），RST_STREAM 触发 abort
+- 超时场景自动发送 RST_STREAM 通知对端
 
 ### 2.4 优雅关闭：GOAWAY
 
@@ -364,7 +370,7 @@ GAP_ANALYSIS.md 已识别 TLS 为 P3 优先级。如果 forpc 添加 QUIC 传输
 |------|--------|---------------|-----------|--------|---------|
 | **流控** | WINDOW_UPDATE | QUIC 内置 | ⚠️ TCP 连接级流控已有，缺 per-Stream 级 | P1 | Streaming 场景需要时实现 Stream 级窗口 |
 | **活性检测** | PING/PONG | QUIC 内置 | ⚠️ TCP keepalive 已有，但探测慢 | P2 | TCP 场景可选加 PING；IPC 场景无需 |
-| **调用取消** | RST_STREAM | STOP_SENDING | ❌ 无法传播取消 | P0 | 新增 RST_STREAM 帧 |
+| **调用取消** | RST_STREAM | STOP_SENDING | ✅ **已实现** RST_STREAM(kind=3) | ~P0~ ✅ | PR #40 |
 | **优雅关闭** | GOAWAY | QUIC 内置 | ❌ 直接断开 | P1 | 新增 GOAWAY 帧 |
 | **参数协商** | SETTINGS | Transport Params | ❌ 无 | P1 | 连接握手时交换 SETTINGS |
 | **头部压缩** | HPACK | QPACK | ❌ 明文传输 | P2 | 实现简化版 HPACK |
@@ -380,7 +386,7 @@ GAP_ANALYSIS.md 已识别 TLS 为 P3 优先级。如果 forpc 添加 QUIC 传输
 
 ### 5.1 新增帧类型
 
-当前 forpc 有 3 种帧类型（HEADERS=0, DATA=1, TRAILERS=2）。借鉴 HTTP/2，建议新增以下控制帧：
+当前 forpc 有 4 种帧类型（HEADERS=0, DATA=1, TRAILERS=2, RST_STREAM=3）。借鉴 HTTP/2，建议继续新增以下控制帧：
 
 ```
 新增帧类型：
@@ -391,7 +397,7 @@ GAP_ANALYSIS.md 已识别 TLS 为 P3 优先级。如果 forpc 添加 QUIC 传输
   │  0  │ HEADERS        │ protobuf Call (现有)              │
   │  1  │ DATA           │ 原始 bytes (现有)                │
   │  2  │ TRAILERS       │ protobuf Status (现有)           │
-  │  3  │ RST_STREAM     │ error_code: u32                  │
+  │  3  │ RST_STREAM     │ error_code: u32 (✅ 已实现)      │
   │  4  │ SETTINGS       │ key-value pairs                  │
   │  5  │ PING           │ opaque: u64                      │
   │  6  │ GOAWAY         │ last_stream_id: u32 + reason: u32│
@@ -609,66 +615,15 @@ impl KeepaliveManager {
 }
 ```
 
-### 5.4 RST_STREAM（调用取消）实现
+### 5.4 ~~RST_STREAM（调用取消）~~ ✅ 已实现
 
-```rust
-// ============= Rust 实现 =============
-
-/// 取消一个进行中的调用
-pub async fn cancel_call(&self, stream_id: u32) -> Result<()> {
-    // 1. 发送 RST_STREAM 给对端
-    let error_code: u32 = 8; // CANCEL（与 HTTP/2 一致）
-    self.send_frame(stream_id, FrameKind::RstStream, error_code.to_be_bytes()).await?;
-
-    // 2. 清理本地 pending_call
-    if let Some(pending) = self.pending_calls.remove(&stream_id) {
-        let _ = pending.tx.send(Err(RpcError::cancelled("call cancelled by client")));
-    }
-
-    Ok(())
-}
-
-/// 收到 RST_STREAM 时的处理
-fn on_rst_stream(&self, stream_id: u32, error_code: u32) {
-    // 1. 如果是我们发起的调用 → 通知等待方
-    if let Some(pending) = self.pending_calls.remove(&stream_id) {
-        let _ = pending.tx.send(Err(RpcError::cancelled("call cancelled by remote")));
-    }
-
-    // 2. 如果是对端发起的调用 → 通知 handler 取消
-    if let Some(inbound) = self.inbound_streams.remove(&stream_id) {
-        // 关闭 handler 的 packet channel → handler 感知取消
-        drop(inbound.tx);
-    }
-}
-```
-
-```go
-// ============= Go 实现 =============
-
-// CancelCall 取消一个进行中的调用
-func (p *RpcPeer) CancelCall(streamID uint32) error {
-    // 1. 发送 RST_STREAM
-    errorCode := uint32(8) // CANCEL
-    buf := make([]byte, 4)
-    binary.BigEndian.PutUint32(buf, errorCode)
-    if err := p.sendFrame(streamID, FrameKindRstStream, buf); err != nil {
-        return err
-    }
-
-    // 2. 清理本地 pending call
-    p.mu.Lock()
-    if pc, ok := p.pending[streamID]; ok {
-        delete(p.pending, streamID)
-        p.mu.Unlock()
-        pc.unaryCh <- resultBytes{err: ErrCancelled}
-    } else {
-        p.mu.Unlock()
-    }
-
-    return nil
-}
-```
+> **已在 PR #40 中实现**。以下为实际实现概要：
+> - 帧类型 `RST_STREAM = 3`，payload 为 `u32 BE error_code`
+> - Rust：`CancellationToken` 注入 handler Request，收到 RST_STREAM 时 cancel token
+> - Go：`context.Context` 注入 handler，收到 RST_STREAM 时调用 `cancelFn()`
+> - Node：handler 收到 `AbortSignal`，RST_STREAM 触发 abort
+> - 超时时自动发送 RST_STREAM 通知对端
+> - `BidiStream.cancel()` / `BidiStream.Cancel()` 流式调用主动取消
 
 ### 5.5 GOAWAY（优雅关闭）实现
 
@@ -852,18 +807,19 @@ func (t *QuicTransport) SendFrame(streamID uint32, kind byte, payload []byte) er
 
 ## 6. 分阶段实施路线图
 
-### Phase 0：核心控制帧（P0）
+### Phase 0：核心控制帧（P0）— 部分完成 ✅
 
-**目标**：实现 HTTP/2 中对 RPC 最关键的三个控制机制
+**目标**：实现 HTTP/2 中对 RPC 最关键的控制机制
 
-**工作内容**：
-- [ ] 扩展帧类型：新增 RST_STREAM (3), PING (5), WINDOW_UPDATE (7)
-- [ ] 实现 PING/PONG keepalive（Rust / Go / Node）
-- [ ] 实现 RST_STREAM 调用取消 + handler 端取消感知
-- [ ] 实现双层流控（连接级 + Stream 级 WINDOW_UPDATE）
-- [ ] 单元测试 + 跨语言互通测试
+**已完成**：
+- [x] RST_STREAM (kind=3) 帧类型定义和实现（PR #40）
+- [x] RST_STREAM 调用取消 + handler 端取消感知（CancellationToken / context.Context / AbortSignal）
+- [x] 超时时自动发送 RST_STREAM 通知对端
 
-**估算**：Rust 5-7 天，Go 3-5 天，Node 2-3 天
+**仍需完成**：
+- [ ] PING (kind=5) / PONG keepalive（仅 TCP 远程场景需要，P2）
+- [ ] 双层流控 WINDOW_UPDATE (kind=7)（仅 Streaming 场景需要，P1）
+- [ ] 单元测试 + 跨语言互通测试（RST_STREAM 测试已有，PING/WINDOW_UPDATE 待补）
 
 ### Phase 1：连接管理（P1）
 

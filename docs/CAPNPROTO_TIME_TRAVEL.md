@@ -1,7 +1,8 @@
 # Cap'n Proto "Time Travel" RPC 与 forpc 实现方案
 
-> **日期**: 2026-03-06
+> **日期**: 2026-03-09（更新）
 > **范围**: 研究 Cap'n Proto 的"时间旅行"（Promise Pipelining）机制，分析其核心原理，并提出在 forpc 中实现类似能力的方案。
+> **结论**: 完整 Pipelining 对 forpc 来说过重。轻量可借鉴的模式见 [PIPELINING_LITE.md](./PIPELINING_LITE.md)。
 
 ---
 
@@ -227,6 +228,8 @@ forpc 已有一些对实现 Pipelining 有利的基础：
 - ✅ **stream_id 多路复用**：已有 ID 分配和 pending_calls 追踪机制
 - ✅ **Metadata**：可通过 metadata 传递 Promise 引用信息
 - ✅ **Protobuf**：结构化消息可方便扩展新字段
+- ✅ **RST_STREAM 取消**（PR #40）：已有调用取消基础设施，可为 Pipeline 取消链复用
+- ✅ **超时执行**（PR #35）：`:timeout` metadata 已在三端执行
 
 ---
 

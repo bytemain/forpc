@@ -1,8 +1,9 @@
 # 从 Cap'n Proto 时间旅行中借鉴的轻量模式
 
-> **日期**: 2026-03-06
+> **日期**: 2026-03-09（更新）
 > **前置文档**: [CAPNPROTO_TIME_TRAVEL.md](./CAPNPROTO_TIME_TRAVEL.md)
 > **目标**: 不实现完整的 Promise Pipelining / Capability 系统，而是从中提取 **成本低、收益高** 的模式直接应用到 forpc。
+> **上次更新**: 合并 master 后确认——超时执行和 RST_STREAM 取消已实现，本文所列模式仍为待实现状态。
 
 ---
 
