@@ -14,9 +14,6 @@ import (
 func RegisterRaw(peer *RpcPeer, method string, h func([]byte, map[string]string, *RpcPeer) ([]byte, *RpcError)) {
 	peer.Register(method, func(r Request, p *RpcPeer) Response {
 		payload := r.ReadPayload()
-		if len(payload) == 0 {
-			return ResponseError(pb.StatusCode_INVALID_ARGUMENT, "missing payload")
-		}
 		resp, rpcErr := h(payload, r.Metadata, p)
 		if rpcErr != nil {
 			return Response{Metadata: map[string]string{}, Payload: nil, Status: Status{Code: rpcErr.Code, Message: rpcErr.Message}}

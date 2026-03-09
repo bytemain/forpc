@@ -26,8 +26,11 @@ type Request struct {
 
 // ReadPayload returns the request payload bytes. If Payload is already
 // populated it is returned directly. Otherwise the method drains the
-// Stream channel, collecting the last DATA frame payload and discarding
+// Stream channel, returning the last DATA frame payload and discarding
 // protocol frames so callers do not need to understand the frame structure.
+// For unary calls the protocol sends a single DATA frame, so this returns
+// that frame's payload. If multiple DATA frames are present, only the
+// last one is kept.
 func (r *Request) ReadPayload() []byte {
 	if r.Payload != nil {
 		return r.Payload
