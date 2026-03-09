@@ -12,6 +12,7 @@ import {
   headersPacket,
   dataPacket,
   trailersPacket,
+  rstStreamPacket,
   statusOk,
 } from '../src/protocol'
 
@@ -19,6 +20,7 @@ test('FrameKind constants match Rust/Go', (t) => {
   t.is(FrameKind.HEADERS, 0)
   t.is(FrameKind.DATA, 1)
   t.is(FrameKind.TRAILERS, 2)
+  t.is(FrameKind.RST_STREAM, 3)
 })
 
 test('StatusCode constants match Rust/Go', (t) => {
@@ -138,4 +140,22 @@ test('Status protobuf is compatible with Rust encoding', (t) => {
   const encoded = encodeStatus(status)
   // First byte should be 0x08 (field 1, wire type 0 = varint)
   t.is(encoded[0], 0x08)
+})
+
+test('rstStreamPacket helper', (t) => {
+  const packet = rstStreamPacket(42, StatusCode.CANCELLED)
+  t.is(packet.streamId, 42)
+  t.is(packet.kind, FrameKind.RST_STREAM)
+  t.is(packet.payload.length, 4)
+  t.is(packet.payload.readUInt32BE(0), StatusCode.CANCELLED)
+})
+
+test('RST_STREAM packet encode/decode roundtrip', (t) => {
+  const packet = rstStreamPacket(99, StatusCode.CANCELLED)
+  const encoded = encodePacket(packet)
+  const decoded = decodePacket(encoded)
+  t.is(decoded.streamId, 99)
+  t.is(decoded.kind, FrameKind.RST_STREAM)
+  t.is(decoded.payload.length, 4)
+  t.is(decoded.payload.readUInt32BE(0), StatusCode.CANCELLED)
 })

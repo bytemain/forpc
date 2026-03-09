@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::pin::Pin;
 use std::future::Future;
 use tokio::sync::{mpsc, Mutex, oneshot, RwLock};
+use tokio_util::sync::CancellationToken;
 use bytes::Bytes;
 use prost::Message;
 
@@ -22,6 +23,7 @@ pub struct RpcPeer {
     pub(crate) handlers: Arc<RwLock<HashMap<String, BoxedHandler>>>,
     pub(crate) pending_calls: Arc<Mutex<HashMap<u32, PendingCall>>>,
     pub(crate) inbound_streams: Arc<Mutex<HashMap<u32, StreamState>>>,
+    pub(crate) inbound_cancels: Arc<Mutex<HashMap<u32, CancellationToken>>>,
     pub(crate) early_inbound: Arc<Mutex<HashMap<u32, Vec<Packet>>>>,
     next_stream_id: AtomicU32,
     is_initiator: bool,
@@ -44,6 +46,7 @@ pub struct Request {
     pub payload: Option<Bytes>,
     pub stream: Option<mpsc::Receiver<Packet>>, // Packet contains payload
     pub stream_id: u32,
+    pub cancel_token: CancellationToken,
 }
 
 pub struct Response {
@@ -127,6 +130,7 @@ impl RpcPeer {
             handlers: Arc::new(RwLock::new(HashMap::new())),
             pending_calls: Arc::new(Mutex::new(HashMap::new())),
             inbound_streams: Arc::new(Mutex::new(HashMap::new())),
+            inbound_cancels: Arc::new(Mutex::new(HashMap::new())),
             early_inbound: Arc::new(Mutex::new(HashMap::new())),
             next_stream_id: AtomicU32::new(if is_initiator { 1 } else { 2 }),
             is_initiator,
@@ -208,7 +212,7 @@ impl RpcPeer {
         pending.insert(stream_id, pending_call);
     }
 
-    async fn remove_pending_call(&self, stream_id: u32) {
+    pub(crate) async fn remove_pending_call(&self, stream_id: u32) {
         let mut pending = self.pending_calls.lock().await;
         pending.remove(&stream_id);
     }
@@ -348,6 +352,7 @@ impl RpcPeer {
                     .map_err(|_| RpcError::new(StatusCode::Cancelled, "Call cancelled"))?,
                 Err(_) => {
                     self.remove_pending_call(stream_id).await;
+                    let _ = self.send_packet(Packet::rst_stream(stream_id, StatusCode::Cancelled as u32)).await;
                     Err(RpcError::new(StatusCode::DeadlineExceeded, "Deadline exceeded"))
                 }
             }
@@ -408,10 +413,15 @@ impl RpcPeer {
                 };
 
                 if let Some(handler) = handler {
+                    let cancel_token = CancellationToken::new();
                     let (tx, rx) = mpsc::channel(32);
                     {
                         let mut streams = self.inbound_streams.lock().await;
                         streams.insert(stream_id, StreamState { tx: tx.clone() });
+                    }
+                    {
+                        let mut cancels = self.inbound_cancels.lock().await;
+                        cancels.insert(stream_id, cancel_token.clone());
                     }
 
                     if let Some(buffered) = {
@@ -437,17 +447,39 @@ impl RpcPeer {
                         payload: None,
                         stream: Some(rx),
                         stream_id,
+                        cancel_token: cancel_token.clone(),
                     };
                     
                     let peer_clone = self.clone();
                     tokio::spawn(async move {
                         let response = handler(req, peer_clone.clone()).await;
+                        // Clean up cancel token after handler completes
+                        {
+                            let mut cancels = peer_clone.inbound_cancels.lock().await;
+                            cancels.remove(&stream_id);
+                        }
                         if let Err(e) = peer_clone.send_response(stream_id, response).await {
                              eprintln!("Failed to send response: {}", e);
                         }
                     });
                 } else {
                     let _ = self.send_response(stream_id, Response::error_with_code(StatusCode::Unimplemented, format!("Method {} not found", call.method))).await;
+                }
+            }
+            frame_kind::RST_STREAM => {
+                {
+                    let mut cancels = self.inbound_cancels.lock().await;
+                    if let Some(token) = cancels.remove(&stream_id) {
+                        token.cancel();
+                    }
+                }
+                {
+                    let mut streams = self.inbound_streams.lock().await;
+                    streams.remove(&stream_id);
+                }
+                {
+                    let mut early = self.early_inbound.lock().await;
+                    early.remove(&stream_id);
                 }
             }
             frame_kind::DATA | frame_kind::TRAILERS => {
@@ -522,6 +554,17 @@ impl RpcPeer {
                      if let Some(tx) = call.stream_tx {
                          let _ = tx.send(packet).await; 
                      }
+                }
+            }
+            frame_kind::RST_STREAM => {
+                let mut pending = self.pending_calls.lock().await;
+                if let Some(call) = pending.remove(&stream_id) {
+                    if let Some(tx) = call.tx {
+                        let _ = tx.send(Err(RpcError::new(StatusCode::Cancelled, "Stream reset by peer")));
+                    }
+                    if let Some(tx) = call.stream_tx {
+                        drop(tx);
+                    }
                 }
             }
             _ => {}
@@ -717,5 +760,135 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp, TestResponse { result: "Fast".into() });
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn rst_stream_cancels_server_handler() {
+        let (ta, tb) = ChannelTransport::pair(256);
+        let a = Arc::new(RpcPeer::new(ta, true));
+        let b = Arc::new(RpcPeer::new(tb, false));
+
+        // Register a slow handler that checks for cancellation
+        let cancel_observed = Arc::new(AtomicBool::new(false));
+        let cancel_observed_clone = cancel_observed.clone();
+
+        b.register("Test/SlowCancel", move |req: Request, _peer| {
+            let observed = cancel_observed_clone.clone();
+            Box::pin(async move {
+                // Wait for either cancellation or a long time
+                tokio::select! {
+                    _ = req.cancel_token.cancelled() => {
+                        observed.store(true, Ordering::SeqCst);
+                        Response::error_with_code(StatusCode::Cancelled, "Cancelled")
+                    }
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+                        Response::ok(Bytes::from_static(b"done"))
+                    }
+                }
+            })
+        }).await;
+
+        let _a_task = spawn_peer(a.clone()).await;
+        let _b_task = spawn_peer(b.clone()).await;
+
+        // Client sends a call with a short timeout, which will trigger RST_STREAM
+        let mut meta = HashMap::new();
+        meta.insert(":timeout".into(), "100".into());
+        let err = a
+            .call_raw_with_metadata("Test/SlowCancel", Bytes::from_static(b"test"), meta)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code, StatusCode::DeadlineExceeded as i32);
+
+        // Give time for the RST_STREAM to propagate to the server
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert!(cancel_observed.load(Ordering::SeqCst), "Server handler should have observed cancellation");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn rst_stream_outbound_resolves_pending_call() {
+        let (ta, tb) = ChannelTransport::pair(256);
+        let a = Arc::new(RpcPeer::new(ta, true));
+        let b = Arc::new(RpcPeer::new(tb, false));
+
+        let _a_task = spawn_peer(a.clone()).await;
+
+        // Manually send RST_STREAM from the "server" side to cancel a pending call
+        let stream_id = 1u32; // First stream ID for initiator (odd = outbound for a)
+        // Insert a pending call on a's side
+        let (tx, rx) = oneshot::channel();
+        {
+            let mut pending = a.pending_calls.lock().await;
+            pending.insert(stream_id, PendingCall {
+                tx: Some(tx),
+                stream_tx: None,
+                unary_buffer: None,
+            });
+        }
+
+        // Send RST_STREAM from b (server) → arrives at a (client)
+        let rst = Packet::rst_stream(stream_id, StatusCode::Cancelled as u32);
+        let encoded = rst.encode().unwrap();
+        b.transport.send(encoded).await.unwrap();
+
+        // The pending call should be resolved with CANCELLED error
+        let result = tokio::time::timeout(std::time::Duration::from_secs(2), rx).await
+            .expect("Should resolve within timeout")
+            .expect("Channel should not be dropped");
+        let err = result.unwrap_err();
+        assert_eq!(err.code, StatusCode::Cancelled as i32);
+    }
+
+    #[test]
+    fn rst_stream_packet_roundtrip() {
+        let p = Packet::rst_stream(42, StatusCode::Cancelled as u32);
+        let encoded = p.encode().unwrap();
+        let decoded = Packet::decode(encoded).unwrap();
+        assert_eq!(decoded.stream_id, 42);
+        assert_eq!(decoded.kind, frame_kind::RST_STREAM);
+        assert_eq!(decoded.payload.len(), 4);
+        // Verify error code
+        let error_code = u32::from_be_bytes(decoded.payload[..4].try_into().unwrap());
+        assert_eq!(error_code, StatusCode::Cancelled as u32);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bidi_stream_cancel_sends_rst_stream() {
+        let (ta, tb) = ChannelTransport::pair(256);
+        let a = Arc::new(RpcPeer::new(ta, true));
+        let b = Arc::new(RpcPeer::new(tb, false));
+
+        // Register a handler that waits for cancellation via cancel_token
+        let cancel_observed = Arc::new(AtomicBool::new(false));
+        let cancel_observed_clone = cancel_observed.clone();
+
+        b.register("Chat/Stream", move |req: Request, _peer| {
+            let observed = cancel_observed_clone.clone();
+            Box::pin(async move {
+                tokio::select! {
+                    _ = req.cancel_token.cancelled() => {
+                        observed.store(true, Ordering::SeqCst);
+                        Response::error_with_code(StatusCode::Cancelled, "Cancelled")
+                    }
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+                        Response::ok(Bytes::from_static(b"done"))
+                    }
+                }
+            })
+        }).await;
+
+        let _a_task = spawn_peer(a.clone()).await;
+        let _b_task = spawn_peer(b.clone()).await;
+
+        // Open a stream and then cancel it
+        let mut stream = a.stream::<TestRequest, TestResponse>("Chat/Stream").await.unwrap();
+        stream.send(TestRequest { data: "hello".into() }).await.unwrap();
+
+        // Cancel the stream — this sends RST_STREAM
+        stream.cancel().await.unwrap();
+
+        // Wait for cancellation to propagate
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert!(cancel_observed.load(Ordering::SeqCst), "Server handler should have observed stream cancellation");
     }
 }
