@@ -188,19 +188,19 @@ func (p *RpcPeer) unaryRawWithMetadata(method string, meta map[string]string, pa
 	if err != nil {
 		return nil, err
 	}
-	if err := p.sendPacket(Packet{StreamID: streamID, Kind: FrameHeaders, Payload: hdrPayload}); err != nil {
-		return nil, err
-	}
-	if err := p.sendPacket(Packet{StreamID: streamID, Kind: FrameData, Payload: payload}); err != nil {
-		return nil, err
-	}
 
 	eos := &pb.Status{Code: pb.StatusCode_OK, Message: "OK"}
 	trPayload, err := proto.Marshal(eos)
 	if err != nil {
 		return nil, err
 	}
-	if err := p.sendPacket(Packet{StreamID: streamID, Kind: FrameTrailers, Payload: trPayload}); err != nil {
+
+	// Batch HEADERS + DATA + TRAILERS into a single transport write
+	if err := p.sendPackets([]Packet{
+		{StreamID: streamID, Kind: FrameHeaders, Payload: hdrPayload},
+		{StreamID: streamID, Kind: FrameData, Payload: payload},
+		{StreamID: streamID, Kind: FrameTrailers, Payload: trPayload},
+	}); err != nil {
 		return nil, err
 	}
 	cleanup = false
@@ -270,23 +270,26 @@ func (p *RpcPeer) Serve() error {
 			}
 			break
 		}
-		pkt, err := DecodePacket(b)
+		// Decode single packet or batch of packets
+		packets, err := DecodePackets(b)
 		if err != nil {
 			continue
 		}
-		if pkt.StreamID == 0 {
-			continue
-		}
-		isInbound := false
-		if p.isInitiator {
-			isInbound = pkt.StreamID%2 == 0
-		} else {
-			isInbound = pkt.StreamID%2 == 1
-		}
-		if isInbound {
-			_ = p.handleInbound(pkt)
-		} else {
-			_ = p.handleOutbound(pkt)
+		for _, pkt := range packets {
+			if pkt.StreamID == 0 {
+				continue
+			}
+			isInbound := false
+			if p.isInitiator {
+				isInbound = pkt.StreamID%2 == 0
+			} else {
+				isInbound = pkt.StreamID%2 == 1
+			}
+			if isInbound {
+				_ = p.handleInbound(pkt)
+			} else {
+				_ = p.handleOutbound(pkt)
+			}
 		}
 	}
 	return nil
@@ -423,21 +426,34 @@ func (p *RpcPeer) handleOutbound(pkt Packet) error {
 }
 
 func (p *RpcPeer) sendResponse(streamID uint32, resp Response) error {
-	if len(resp.Payload) > 0 {
-		if err := p.sendPacket(Packet{StreamID: streamID, Kind: FrameData, Payload: resp.Payload}); err != nil {
-			return err
-		}
-	}
 	st := &pb.Status{Code: resp.Status.Code, Message: resp.Status.Message}
 	tr, err := proto.Marshal(st)
 	if err != nil {
 		return err
 	}
-	return p.sendPacket(Packet{StreamID: streamID, Kind: FrameTrailers, Payload: tr})
+	trailersPkt := Packet{StreamID: streamID, Kind: FrameTrailers, Payload: tr}
+	if len(resp.Payload) > 0 {
+		// Batch DATA + TRAILERS into a single transport write
+		return p.sendPackets([]Packet{
+			{StreamID: streamID, Kind: FrameData, Payload: resp.Payload},
+			trailersPkt,
+		})
+	}
+	return p.sendPacket(trailersPkt)
 }
 
 func (p *RpcPeer) sendPacket(pkt Packet) error {
 	b, err := pkt.Encode()
+	if err != nil {
+		return err
+	}
+	return p.transport.Send(b)
+}
+
+// sendPackets encodes multiple packets into a single batch buffer and sends
+// them as one transport write, reducing syscalls.
+func (p *RpcPeer) sendPackets(packets []Packet) error {
+	b, err := EncodeBatch(packets)
 	if err != nil {
 		return err
 	}
