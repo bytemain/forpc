@@ -76,6 +76,37 @@ impl Packet {
         buf.extend_from_slice(&self.payload);
         Ok(buf.freeze())
     }
+
+    /// Encode multiple packets into a single batch buffer.
+    ///
+    /// If there is only one packet, it is encoded normally (no batch overhead).
+    /// Otherwise, the batch format uses `stream_id=0` as a sentinel:
+    ///
+    /// ```text
+    /// [0x00000000: u32 BE]  -- batch sentinel
+    /// [count: u32 BE]       -- number of sub-packets
+    /// For each sub-packet:
+    ///   [len: u32 BE]       -- length of encoded packet bytes
+    ///   [packet bytes...]   -- standard packet format
+    /// ```
+    pub fn encode_batch(packets: Vec<Packet>) -> Result<Bytes, PacketDecodeError> {
+        if packets.len() == 1 {
+            return packets.into_iter().next().unwrap().encode();
+        }
+        let encoded: Vec<Bytes> = packets
+            .into_iter()
+            .map(|p| p.encode())
+            .collect::<Result<Vec<_>, _>>()?;
+        let total: usize = 8 + encoded.iter().map(|e| 4 + e.len()).sum::<usize>();
+        let mut buf = BytesMut::with_capacity(total);
+        buf.put_u32(0); // batch sentinel (stream_id = 0)
+        buf.put_u32(encoded.len() as u32);
+        for enc in &encoded {
+            buf.put_u32(enc.len() as u32);
+            buf.extend_from_slice(enc);
+        }
+        Ok(buf.freeze())
+    }
     
     pub fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
         if data.len() < 5 {
@@ -92,6 +123,54 @@ impl Packet {
             kind,
             payload,
         })
+    }
+
+    /// Decode a buffer that may contain a single packet or a batch of packets.
+    ///
+    /// If the first 4 bytes are `0x00000000` (stream_id = 0), the buffer is
+    /// treated as a batch envelope and all sub-packets are returned.
+    /// If batch decoding fails (e.g. a regular packet with stream_id=0),
+    /// it falls back to single-packet decoding.
+    pub fn decode_packets(data: Bytes) -> Result<Vec<Self>, PacketDecodeError> {
+        if data.len() < 5 {
+            return Err(PacketDecodeError::TooShort { len: data.len() });
+        }
+        // Peek at first 4 bytes to check for batch sentinel
+        let stream_id = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+        if stream_id == 0 {
+            // Try batch decode first; fall back to single packet on failure
+            if let Ok(packets) = Self::try_decode_batch(data.clone()) {
+                return Ok(packets);
+            }
+        }
+        Ok(vec![Self::decode(data)?])
+    }
+
+    /// Attempt to decode a batch envelope starting with sentinel stream_id=0.
+    fn try_decode_batch(mut data: Bytes) -> Result<Vec<Self>, PacketDecodeError> {
+        if data.len() < 8 {
+            return Err(PacketDecodeError::TooShort { len: data.len() });
+        }
+        data.advance(4); // skip sentinel
+        let count = data.get_u32() as usize;
+        // Sanity check: count must be at least 2 for a batch (single packets
+        // are not wrapped in batch envelopes by encode_batch)
+        if count < 2 {
+            return Err(PacketDecodeError::TooShort { len: 0 });
+        }
+        let mut packets = Vec::with_capacity(count);
+        for _ in 0..count {
+            if data.len() < 4 {
+                return Err(PacketDecodeError::TooShort { len: data.len() });
+            }
+            let len = data.get_u32() as usize;
+            if data.len() < len || len < 5 {
+                return Err(PacketDecodeError::TooShort { len: data.len() });
+            }
+            let pkt_data = data.split_to(len);
+            packets.push(Self::decode(pkt_data)?);
+        }
+        Ok(packets)
     }
 }
 
@@ -113,6 +192,41 @@ mod tests {
     fn packet_decode_too_short() {
         let err = Packet::decode(Bytes::from_static(b"\x01\x02\x03\x04")).unwrap_err();
         assert_eq!(err, PacketDecodeError::TooShort { len: 4 });
+    }
+
+    #[test]
+    fn encode_batch_single_packet_no_envelope() {
+        let p = Packet::data(42, Bytes::from_static(b"single"));
+        let single_encoded = p.clone().encode().unwrap();
+        let batch_encoded = Packet::encode_batch(vec![p]).unwrap();
+        assert_eq!(single_encoded, batch_encoded);
+    }
+
+    #[test]
+    fn encode_decode_batch_roundtrip() {
+        let p1 = Packet::headers(1, &Call::new("method1"));
+        let p2 = Packet::data(1, Bytes::from_static(b"payload"));
+        let p3 = Packet::trailers(1, &Status::ok());
+        let encoded = Packet::encode_batch(vec![p1, p2, p3]).unwrap();
+        // Batch should start with sentinel stream_id=0
+        assert_eq!(&encoded[..4], &[0, 0, 0, 0]);
+        let decoded = Packet::decode_packets(encoded).unwrap();
+        assert_eq!(decoded.len(), 3);
+        assert_eq!(decoded[0].kind, frame_kind::HEADERS);
+        assert_eq!(decoded[0].stream_id, 1);
+        assert_eq!(decoded[1].kind, frame_kind::DATA);
+        assert_eq!(decoded[1].payload, Bytes::from_static(b"payload"));
+        assert_eq!(decoded[2].kind, frame_kind::TRAILERS);
+    }
+
+    #[test]
+    fn decode_packets_single_packet() {
+        let p = Packet::data(99, Bytes::from_static(b"solo"));
+        let encoded = p.encode().unwrap();
+        let decoded = Packet::decode_packets(encoded).unwrap();
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].stream_id, 99);
+        assert_eq!(decoded[0].payload, Bytes::from_static(b"solo"));
     }
 }
 

@@ -246,6 +246,18 @@ impl RpcPeer {
         Ok(())
     }
 
+    /// Send multiple packets in a single transport write using batch encoding.
+    ///
+    /// This reduces syscalls by combining HEADERS + DATA + TRAILERS (or
+    /// DATA + TRAILERS for responses) into one NNG message.
+    pub async fn send_packets(&self, packets: Vec<Packet>) -> RpcResult<()> {
+        let bytes = Packet::encode_batch(packets)
+            .map_err(|e| RpcError::new(StatusCode::Internal, e.to_string()))?;
+        self.transport.send(bytes).await
+            .map_err(|e| RpcError::new(StatusCode::Unavailable, e.to_string()))?;
+        Ok(())
+    }
+
     async fn insert_pending_call(&self, stream_id: u32, pending_call: PendingCall) {
         let mut pending = self.pending_calls.lock().await;
         pending.insert(stream_id, pending_call);
@@ -370,17 +382,12 @@ impl RpcPeer {
             )
             .await;
 
-        if let Err(e) = self.send_call_headers(stream_id, &call).await {
-            self.remove_pending_call(stream_id).await;
-            return Err(e);
-        }
-
-        if let Err(e) = self.send_packet(Packet::data(stream_id, payload)).await {
-            self.remove_pending_call(stream_id).await;
-            return Err(e);
-        }
-
-        if let Err(e) = self.send_stream_trailers(stream_id, &Status::ok()).await {
+        // Batch HEADERS + DATA + TRAILERS into a single transport write
+        if let Err(e) = self.send_packets(vec![
+            Packet::headers(stream_id, &call),
+            Packet::data(stream_id, payload),
+            Packet::trailers(stream_id, &Status::ok()),
+        ]).await {
             self.remove_pending_call(stream_id).await;
             return Err(e);
         }
@@ -413,27 +420,29 @@ impl RpcPeer {
                 }
             };
             
-            let packet = {
-                Packet::decode(bytes).map_err(|e| RpcError::new(StatusCode::Internal, e.to_string()))?
-            };
+            // Decode single packet or batch of packets
+            let packets = Packet::decode_packets(bytes)
+                .map_err(|e| RpcError::new(StatusCode::Internal, e.to_string()))?;
 
-            if packet.stream_id == 0 {
-                continue;
-            }
-            
-            let is_inbound = if self.is_initiator {
-                packet.stream_id % 2 == 0
-            } else {
-                packet.stream_id % 2 == 1
-            };
-            
-            let result = if is_inbound {
-                self.handle_inbound(packet).await
-            } else {
-                self.handle_outbound(packet).await
-            };
-            if let Err(e) = result {
-                eprintln!("{}", e);
+            for packet in packets {
+                if packet.stream_id == 0 {
+                    continue;
+                }
+                
+                let is_inbound = if self.is_initiator {
+                    packet.stream_id % 2 == 0
+                } else {
+                    packet.stream_id % 2 == 1
+                };
+                
+                let result = if is_inbound {
+                    self.handle_inbound(packet).await
+                } else {
+                    self.handle_outbound(packet).await
+                };
+                if let Err(e) = result {
+                    eprintln!("{}", e);
+                }
             }
         }
         Ok(())
@@ -554,11 +563,16 @@ impl RpcPeer {
     }
     
     async fn send_response(&self, stream_id: u32, response: Response) -> RpcResult<()> {
+        let trailers = Packet::trailers(stream_id, &response.status);
         if let Some(payload) = response.payload {
-            self.send_packet(Packet::data(stream_id, payload)).await?;
+            // Batch DATA + TRAILERS into a single transport write
+            self.send_packets(vec![
+                Packet::data(stream_id, payload),
+                trailers,
+            ]).await
+        } else {
+            self.send_packet(trailers).await
         }
-        let packet = Packet::trailers(stream_id, &response.status);
-        self.send_packet(packet).await
     }
 
     async fn handle_outbound(self: &Arc<Self>, packet: Packet) -> RpcResult<()> {
