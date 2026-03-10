@@ -22,8 +22,6 @@ import {
   FrameKind,
   encodePacket,
   decodePacket,
-  decodePackets,
-  encodeBatchRaw,
   headersPacket,
   dataPacket,
   trailersPacket,
@@ -185,40 +183,37 @@ export class Peer {
     const loop = async () => {
       try {
         while (!this.closed) {
-          // Phase 1: drain all queued sends, batching into a single write
-          if (this.sendQueue.length > 0) {
-            const batch = this.sendQueue.splice(0)
-            const merged = encodeBatchRaw(batch)
-            await this.dealer.send(merged)
+          // Phase 1: drain all queued sends
+          while (this.sendQueue.length > 0) {
+            const msg = this.sendQueue.shift()!
+            await this.dealer.send(msg)
           }
 
           // Phase 2: if no pending calls, exit loop
           if (this.pendingCalls.size === 0) break
 
-          // Phase 3: receive and route response packet(s)
+          // Phase 3: receive and route one response packet
           const msg = await this.dealer.recv()
           const body = msg.body()
           if (body.length < 5) continue
 
-          const packets = decodePackets(body)
-          for (const packet of packets) {
-            const pending = this.pendingCalls.get(packet.streamId)
-            if (!pending) continue
+          const packet = decodePacket(body)
+          const pending = this.pendingCalls.get(packet.streamId)
+          if (!pending) continue
 
-            if (packet.kind === FrameKind.DATA) {
-              pending.dataBuffer = packet.payload
-            } else if (packet.kind === FrameKind.TRAILERS) {
-              this.pendingCalls.delete(packet.streamId)
-              const status: Status = decodeStatus(packet.payload)
-              if (status.code === StatusCode.OK) {
-                pending.resolve(pending.dataBuffer || Buffer.alloc(0))
-              } else {
-                pending.reject(new RpcError(status.code, status.message))
-              }
-            } else if (packet.kind === FrameKind.RST_STREAM) {
-              this.pendingCalls.delete(packet.streamId)
-              pending.reject(new RpcError(StatusCode.CANCELLED, 'Stream reset by peer'))
+          if (packet.kind === FrameKind.DATA) {
+            pending.dataBuffer = packet.payload
+          } else if (packet.kind === FrameKind.TRAILERS) {
+            this.pendingCalls.delete(packet.streamId)
+            const status: Status = decodeStatus(packet.payload)
+            if (status.code === StatusCode.OK) {
+              pending.resolve(pending.dataBuffer || Buffer.alloc(0))
+            } else {
+              pending.reject(new RpcError(status.code, status.message))
             }
+          } else if (packet.kind === FrameKind.RST_STREAM) {
+            this.pendingCalls.delete(packet.streamId)
+            pending.reject(new RpcError(StatusCode.CANCELLED, 'Stream reset by peer'))
           }
         }
       } catch (err) {
