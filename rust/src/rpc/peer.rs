@@ -64,7 +64,7 @@ impl Request {
         if let Some(mut rx) = self.stream.take() {
             while let Some(packet) = rx.recv().await {
                 if packet.kind == frame_kind::DATA {
-                    payload = packet.payload;
+                    payload = Bytes::from(packet.payload);
                 }
             }
         }
@@ -239,9 +239,7 @@ impl RpcPeer {
     }
     
     pub async fn send_packet(&self, packet: Packet) -> RpcResult<()> {
-        let bytes = {
-            packet.encode().map_err(|e| RpcError::new(StatusCode::Internal, e.to_string()))?
-        };
+        let bytes = packet.encode_to_bytes();
         self.transport.send(bytes).await.map_err(|e| RpcError::new(StatusCode::Unavailable, e.to_string()))?;
         Ok(())
     }
@@ -413,9 +411,8 @@ impl RpcPeer {
                 }
             };
             
-            let packet = {
-                Packet::decode(bytes).map_err(|e| RpcError::new(StatusCode::Internal, e.to_string()))?
-            };
+            let packet = Packet::decode_from_bytes(&bytes)
+                .map_err(|e| RpcError::new(StatusCode::Internal, e.to_string()))?;
 
             if packet.stream_id == 0 {
                 continue;
@@ -570,7 +567,7 @@ impl RpcPeer {
                      if let Some(tx) = &call.stream_tx {
                          let _ = tx.send(packet).await;
                      } else if call.tx.is_some() {
-                         call.unary_buffer = Some(packet.payload);
+                         call.unary_buffer = Some(Bytes::from(packet.payload));
                      }
                  }
             }
@@ -739,7 +736,7 @@ mod tests {
         let _a_task = spawn_peer(a.clone()).await;
         let _b_task = spawn_peer(b.clone()).await;
 
-        let junk = Packet::data(0, Bytes::from_static(b"junk")).encode().unwrap();
+        let junk = Packet::data(0, b"junk".to_vec()).encode_to_bytes();
         a.transport.send(junk).await.unwrap();
 
         let resp: TestResponse = a
@@ -867,7 +864,7 @@ mod tests {
 
         // Send RST_STREAM from b (server) → arrives at a (client)
         let rst = Packet::rst_stream(stream_id, StatusCode::Cancelled as u32);
-        let encoded = rst.encode().unwrap();
+        let encoded = rst.encode_to_bytes();
         b.transport.send(encoded).await.unwrap();
 
         // The pending call should be resolved with CANCELLED error
@@ -881,14 +878,12 @@ mod tests {
     #[test]
     fn rst_stream_packet_roundtrip() {
         let p = Packet::rst_stream(42, StatusCode::Cancelled as u32);
-        let encoded = p.encode().unwrap();
-        let decoded = Packet::decode(encoded).unwrap();
+        let encoded = p.encode_to_bytes();
+        let decoded = Packet::decode_from_bytes(&encoded).unwrap();
         assert_eq!(decoded.stream_id, 42);
         assert_eq!(decoded.kind, frame_kind::RST_STREAM);
-        assert_eq!(decoded.payload.len(), 4);
-        // Verify error code
-        let error_code = u32::from_be_bytes(decoded.payload[..4].try_into().unwrap());
-        assert_eq!(error_code, StatusCode::Cancelled as u32);
+        assert!(decoded.payload.is_empty());
+        assert_eq!(decoded.error_code, StatusCode::Cancelled as u32);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

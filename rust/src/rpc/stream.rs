@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use bytes::Bytes;
 use prost::Message;
 use super::peer::RpcPeer;
 use super::protocol::{Packet, Status, StatusCode, frame_kind};
@@ -23,11 +24,12 @@ impl<Req: Message + Send + Sync + 'static, Resp: Message + Default + Send + Sync
             Some(packet) => {
                 match packet.kind {
                     frame_kind::DATA => {
-                        let msg: Resp = self.peer.user_deserialize(&packet.payload).await?;
+                        let bytes = Bytes::from(packet.payload);
+                        let msg: Resp = self.peer.user_deserialize(&bytes).await?;
                         Ok(Some(msg))
                     }
                     frame_kind::TRAILERS => {
-                        let status: Status = Status::decode(packet.payload.as_ref())
+                        let status: Status = Status::decode(packet.payload.as_slice())
                              .map_err(|e| RpcError::new(StatusCode::Internal, e.to_string()))?;
                         
                         if status.is_ok() {

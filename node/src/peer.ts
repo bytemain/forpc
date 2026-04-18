@@ -195,9 +195,13 @@ export class Peer {
           // Phase 3: receive and route one response packet
           const msg = await this.dealer.recv()
           const body = msg.body()
-          if (body.length < 5) continue
 
-          const packet = decodePacket(body)
+          let packet
+          try {
+            packet = decodePacket(body)
+          } catch {
+            continue
+          }
           const pending = this.pendingCalls.get(packet.streamId)
           if (!pending) continue
 

@@ -29,8 +29,8 @@ func TestInteropRustGoPacketEcho(t *testing.T) {
 	}
 	defer dealer.Close()
 
-	in := Packet{StreamID: 1, Kind: FrameData, Payload: []byte("Hello")}
-	b, _ := in.Encode()
+	in := &Packet{StreamId: 1, Kind: FrameData, Payload: []byte("Hello")}
+	b, _ := EncodePacket(in)
 	if _, err := dealer.Send(b); err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestInteropRustGoPacketEcho(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if out.StreamID != 1 || out.Kind != FrameData || string(out.Payload) != "Hello" {
+	if out.StreamId != 1 || out.Kind != FrameData || string(out.Payload) != "Hello" {
 		t.Fatalf("unexpected packet: %#v", out)
 	}
 }

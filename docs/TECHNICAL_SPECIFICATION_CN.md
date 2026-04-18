@@ -255,14 +255,22 @@ Mini-RPC 定义三种帧类型，对应 gRPC 的 HTTP/2 帧：
 
 ### 3.2 帧格式
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                      Packet                             │
-├─────────────┬─────────────┬─────────────────────────────┤
-│  stream_id  │    kind     │          payload            │
-│   (4 bytes) │  (1 byte)   │       (variable length)     │
-│    u32      │     u8      │          Vec<u8>            │
-└─────────────┴─────────────┴─────────────────────────────┘
+`Packet` 是一个 protobuf 消息（定义见 `proto/forpc.proto`），完全由 protobuf 编解码，不再有任何手写的二进制布局：
+
+```protobuf
+enum FrameKind {
+  HEADERS    = 0;
+  DATA       = 1;
+  TRAILERS   = 2;
+  RST_STREAM = 3;
+}
+
+message Packet {
+  uint32    stream_id  = 1;
+  FrameKind kind       = 2;
+  bytes     payload    = 3;
+  uint32    error_code = 4;  // 仅 RST_STREAM 使用
+}
 ```
 
 ### 3.3 Payload 结构
@@ -328,142 +336,41 @@ struct Status {
 
 ### 4.1 核心数据结构
 
-```rust
-// =============================================================================
-// 文件: src/rpc/protocol.rs
-// =============================================================================
+所有协议结构（`Packet`、`Call`、`Status`、`FrameKind`、`StatusCode`）均由 `proto/forpc.proto` 中的 protobuf 定义生成，三种语言（Rust / Go / Node）共用同一份 schema，避免任何手写的编解码逻辑。
 
-use fory::ForyObject;
-use std::collections::HashMap;
+```protobuf
+// 文件: proto/forpc.proto
 
-/// 帧类型常量
-pub mod frame_kind {
-    pub const HEADERS: u8 = 0;
-    pub const DATA: u8 = 1;
-    pub const TRAILERS: u8 = 2;
+enum FrameKind {
+  HEADERS    = 0;
+  DATA       = 1;
+  TRAILERS   = 2;
+  RST_STREAM = 3;
 }
 
-/// 传输层数据包
-/// 
-/// 所有 RPC 通信都通过此结构进行封装
-#[derive(ForyObject, Debug, Clone)]
-pub struct Packet {
-    /// 流标识符，用于多路复用
-    /// - 奇数: 连接发起方发起的调用
-    /// - 偶数: 连接接受方发起的调用
-    pub stream_id: u32,
-    
-    /// 帧类型: 0=HEADERS, 1=DATA, 2=TRAILERS
-    pub kind: u8,
-    
-    /// 负载数据，根据 kind 解释
-    pub payload: Vec<u8>,
-}
+message Packet {
+  // 流标识符，用于多路复用：
+  //   - 奇数：连接发起方发起的调用
+  //   - 偶数：连接接受方发起的调用
+  //   - 0   ：保留/控制流（实现会忽略）
+  uint32    stream_id  = 1;
 
-impl Packet {
-    /// 创建 HEADERS 帧
-    pub fn headers(stream_id: u32, call: &Call, fory: &mut Fory) -> Result<Self, Error> {
-        Ok(Self {
-            stream_id,
-            kind: frame_kind::HEADERS,
-            payload: fory.serialize(call)?,
-        })
-    }
-    
-    /// 创建 DATA 帧
-    pub fn data(stream_id: u32, payload: Vec<u8>) -> Self {
-        Self {
-            stream_id,
-            kind: frame_kind::DATA,
-            payload,
-        }
-    }
-    
-    /// 创建 TRAILERS 帧
-    pub fn trailers(stream_id: u32, status: &Status, fory: &mut Fory) -> Result<Self, Error> {
-        Ok(Self {
-            stream_id,
-            kind: frame_kind::TRAILERS,
-            payload: fory.serialize(status)?,
-        })
-    }
-    
-    /// 判断是否为流结束帧
-    pub fn is_end_of_stream(&self) -> bool {
-        self.kind == frame_kind::TRAILERS
-    }
-    
-    /// 判断是否由连接发起方发起
-    pub fn is_from_initiator(&self) -> bool {
-        self.stream_id % 2 == 1
-    }
-}
+  // 帧类型
+  FrameKind kind       = 2;
 
-/// RPC 调用信息（HEADERS payload）
-#[derive(ForyObject, Debug, Clone)]
-pub struct Call {
-    /// 方法全名，格式: "ServiceName/MethodName"
-    pub method: String,
-    
-    /// 元数据键值对
-    pub metadata: HashMap<String, String>,
-}
+  // 负载数据，根据 kind 解释：
+  //   - HEADERS:    编码后的 Call
+  //   - DATA:       用户消息字节
+  //   - TRAILERS:   编码后的 Status
+  //   - RST_STREAM: 空（错误码放在 error_code）
+  bytes     payload    = 3;
 
-impl Call {
-    pub fn new(method: impl Into<String>) -> Self {
-        Self {
-            method: method.into(),
-            metadata: HashMap::new(),
-        }
-    }
-    
-    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.metadata.insert(key.into(), value.into());
-        self
-    }
-    
-    /// 获取超时设置（毫秒）
-    pub fn timeout_ms(&self) -> Option<u64> {
-        self.metadata.get(":timeout").and_then(|v| v.parse().ok())
-    }
-}
-
-/// RPC 状态（TRAILERS payload）
-#[derive(ForyObject, Debug, Clone)]
-pub struct Status {
-    /// 状态码
-    pub code: u32,
-    
-    /// 状态消息
-    pub message: String,
-}
-
-impl Status {
-    pub fn new(code: u32, message: impl Into<String>) -> Self {
-        Self { code, message: message.into() }
-    }
-    
-    pub fn ok() -> Self {
-        Self { code: StatusCode::OK, message: "OK".into() }
-    }
-    
-    pub fn cancelled(message: impl Into<String>) -> Self {
-        Self { code: StatusCode::CANCELLED, message: message.into() }
-    }
-    
-    pub fn unknown(message: impl Into<String>) -> Self {
-        Self { code: StatusCode::UNKNOWN, message: message.into() }
-    }
-    
-    pub fn internal(message: impl Into<String>) -> Self {
-        Self { code: StatusCode::INTERNAL, message: message.into() }
-    }
-    
-    pub fn is_ok(&self) -> bool {
-        self.code == StatusCode::OK
-    }
+  // 仅 RST_STREAM 使用：取消/错误码（与 StatusCode 对齐）
+  uint32    error_code = 4;
 }
 ```
+
+各语言侧仅在 `protocol.{rs,go,ts}` 中提供构造帮助函数（`headers/data/trailers/rst_stream`）和薄封装的 `encode/decode`，全部委托给 protobuf 生成代码。
 
 ### 4.2 状态码定义
 

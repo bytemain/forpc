@@ -33,3 +33,33 @@ message Status {
   StatusCode code = 1;
   string message = 2;
 }
+
+// FrameKind identifies the type of a Packet frame on the wire.
+// Values are stable and must match across Rust/Go/Node implementations.
+enum FrameKind {
+  HEADERS    = 0;
+  DATA       = 1;
+  TRAILERS   = 2;
+  RST_STREAM = 3;
+}
+
+// Packet is the unit of transmission on the underlying transport.
+// All fields are encoded with standard protobuf semantics; there is no
+// hand-written framing on top of this message.
+message Packet {
+  // Stream identifier. Stream id 0 is reserved and ignored.
+  uint32 stream_id = 1;
+
+  // Frame kind.
+  FrameKind kind = 2;
+
+  // Frame payload.
+  // - HEADERS:    encoded Call message
+  // - DATA:       user payload bytes
+  // - TRAILERS:   encoded Status message
+  // - RST_STREAM: empty (see error_code)
+  bytes payload = 3;
+
+  // Error code for RST_STREAM frames. Unused for other frame kinds.
+  uint32 error_code = 4;
+}

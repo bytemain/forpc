@@ -1,25 +1,24 @@
 /**
  * Protocol layer for forpc
  *
- * Implements Packet framing and protobuf message encoding/decoding
- * that is compatible with the Rust and Go implementations.
+ * The wire format is a single protobuf-encoded `Packet` message. There is
+ * no hand-written framing on top: encode/decode round-trip exclusively
+ * through `Packet.encode` / `Packet.decode` from the generated protobuf
+ * code, matching the Rust and Go implementations.
  *
- * Packet wire format: [stream_id: u32 BE][kind: u8][payload...]
- * Protobuf messages: Call (method + metadata), Status (code + message)
+ * Re-exports protobuf-generated `Call`, `Status`, `Packet` and `FrameKind`
+ * symbols and provides small ergonomic helpers used by `peer.ts` /
+ * `server.ts`.
  */
 
 import proto from './generated/forpc.js'
 
 const CallMessage = proto.forpc.Call
 const StatusMessage = proto.forpc.Status
+const PacketMessage = proto.forpc.Packet
 
-// Frame kind constants matching Rust/Go
-export const FrameKind = {
-  HEADERS: 0,
-  DATA: 1,
-  TRAILERS: 2,
-  RST_STREAM: 3,
-} as const
+// Frame kind constants, sourced from the generated protobuf enum.
+export const FrameKind = proto.forpc.FrameKind
 
 // gRPC-compatible status codes from protobuf definition
 export const StatusCode = proto.forpc.StatusCode
@@ -38,6 +37,7 @@ export interface Packet {
   streamId: number
   kind: number
   payload: Buffer
+  errorCode: number
 }
 
 /**
@@ -85,27 +85,34 @@ export function decodeStatus(buf: Buffer): Status {
 }
 
 /**
- * Encode a Packet to wire format: [stream_id: u32 BE][kind: u8][payload...]
+ * Encode a Packet to its protobuf wire bytes.
  */
 export function encodePacket(packet: Packet): Buffer {
-  const buf = Buffer.alloc(5 + packet.payload.length)
-  buf.writeUInt32BE(packet.streamId, 0)
-  buf.writeUInt8(packet.kind, 4)
-  packet.payload.copy(buf, 5)
-  return buf
+  const msg = PacketMessage.create({
+    streamId: packet.streamId,
+    kind: packet.kind,
+    payload: packet.payload,
+    errorCode: packet.errorCode,
+  })
+  return Buffer.from(PacketMessage.encode(msg).finish())
 }
 
 /**
- * Decode wire format bytes to a Packet
+ * Decode protobuf wire bytes into a Packet.
  */
 export function decodePacket(data: Buffer): Packet {
-  if (data.length < 5) {
-    throw new Error(`packet too short: len=${data.length}`)
+  const msg = PacketMessage.decode(data) as unknown as {
+    streamId: number
+    kind: number
+    payload: Uint8Array
+    errorCode: number
   }
-  const streamId = data.readUInt32BE(0)
-  const kind = data.readUInt8(4)
-  const payload = data.subarray(5)
-  return { streamId, kind, payload: Buffer.from(payload) }
+  return {
+    streamId: msg.streamId || 0,
+    kind: msg.kind || 0,
+    payload: Buffer.from(msg.payload || []),
+    errorCode: msg.errorCode || 0,
+  }
 }
 
 /**
@@ -116,6 +123,7 @@ export function headersPacket(streamId: number, call: Call): Packet {
     streamId,
     kind: FrameKind.HEADERS,
     payload: encodeCall(call),
+    errorCode: 0,
   }
 }
 
@@ -127,6 +135,7 @@ export function dataPacket(streamId: number, payload: Buffer): Packet {
     streamId,
     kind: FrameKind.DATA,
     payload,
+    errorCode: 0,
   }
 }
 
@@ -138,19 +147,20 @@ export function trailersPacket(streamId: number, status: Status): Packet {
     streamId,
     kind: FrameKind.TRAILERS,
     payload: encodeStatus(status),
+    errorCode: 0,
   }
 }
 
 /**
- * Create a RST_STREAM packet with an error code (u32 BE)
+ * Create a RST_STREAM packet with an error code carried in the dedicated
+ * `errorCode` field of the protobuf message.
  */
 export function rstStreamPacket(streamId: number, errorCode: number): Packet {
-  const payload = Buffer.alloc(4)
-  payload.writeUInt32BE(errorCode, 0)
   return {
     streamId,
     kind: FrameKind.RST_STREAM,
-    payload,
+    payload: Buffer.alloc(0),
+    errorCode,
   }
 }
 

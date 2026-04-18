@@ -1,97 +1,75 @@
 use prost::Message;
 use std::collections::HashMap;
-use bytes::{Bytes, BytesMut, Buf, BufMut};
+use bytes::Bytes;
 
-use std::fmt;
+include!("../gen/forpc.rs");
 
+/// Frame kind constants (i32 to match the generated `FrameKind` proto enum).
+///
+/// These mirror the [`FrameKind`] enum values and are kept as plain
+/// constants for ergonomic comparison against `Packet::kind` (which is
+/// `i32` in the generated code).
 pub mod frame_kind {
-    pub const HEADERS: u8 = 0;
-    pub const DATA: u8 = 1;
-    pub const TRAILERS: u8 = 2;
-    pub const RST_STREAM: u8 = 3;
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PacketDecodeError {
-    TooShort { len: usize },
-}
-
-impl fmt::Display for PacketDecodeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::TooShort { len } => write!(f, "packet too short: len={}", len),
-        }
-    }
-}
-
-impl std::error::Error for PacketDecodeError {}
-
-#[derive(Debug, Clone)]
-pub struct Packet {
-    pub stream_id: u32,
-    pub kind: u8,
-    pub payload: Bytes,
+    pub const HEADERS: i32 = 0;
+    pub const DATA: i32 = 1;
+    pub const TRAILERS: i32 = 2;
+    pub const RST_STREAM: i32 = 3;
 }
 
 impl Packet {
+    /// Build a HEADERS frame carrying an encoded [`Call`].
     pub fn headers(stream_id: u32, call: &Call) -> Self {
         Self {
             stream_id,
             kind: frame_kind::HEADERS,
-            payload: Bytes::from(call.encode_to_vec()),
+            payload: call.encode_to_vec(),
+            error_code: 0,
         }
     }
-    
-    pub fn data(stream_id: u32, payload: Bytes) -> Self {
+
+    /// Build a DATA frame carrying user payload bytes.
+    pub fn data(stream_id: u32, payload: impl Into<Vec<u8>>) -> Self {
         Self {
             stream_id,
             kind: frame_kind::DATA,
-            payload,
+            payload: payload.into(),
+            error_code: 0,
         }
     }
-    
+
+    /// Build a TRAILERS frame carrying an encoded [`Status`].
     pub fn trailers(stream_id: u32, status: &Status) -> Self {
         Self {
             stream_id,
             kind: frame_kind::TRAILERS,
-            payload: Bytes::from(status.encode_to_vec()),
+            payload: status.encode_to_vec(),
+            error_code: 0,
         }
     }
 
+    /// Build a RST_STREAM frame with the given error code.
     pub fn rst_stream(stream_id: u32, error_code: u32) -> Self {
-        let mut buf = BytesMut::with_capacity(4);
-        buf.put_u32(error_code);
         Self {
             stream_id,
             kind: frame_kind::RST_STREAM,
-            payload: buf.freeze(),
+            payload: Vec::new(),
+            error_code,
         }
     }
-    
-    pub fn encode(self) -> Result<Bytes, PacketDecodeError> {
-        // Manual framing: u32 (BE) + u8
-        let mut buf = BytesMut::with_capacity(5 + self.payload.len());
-        buf.put_u32(self.stream_id);
-        buf.put_u8(self.kind);
-        buf.extend_from_slice(&self.payload);
-        Ok(buf.freeze())
+
+    /// Encode this packet to wire bytes using protobuf.
+    pub fn encode_to_bytes(&self) -> Bytes {
+        Bytes::from(self.encode_to_vec())
     }
-    
-    pub fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        if data.len() < 5 {
-            return Err(PacketDecodeError::TooShort { len: data.len() });
-        }
-        let stream_id = data.get_u32();
-        let kind = data.get_u8();
-        // Remaining is payload
-        // data.get_* advances the Bytes cursor (slice)
-        let payload = data;
-        
-        Ok(Self {
-            stream_id,
-            kind,
-            payload,
-        })
+
+    /// Decode a packet from wire bytes using protobuf.
+    pub fn decode_from_bytes(buf: &[u8]) -> Result<Self, prost::DecodeError> {
+        <Self as Message>::decode(buf)
+    }
+
+    /// Take the payload, leaving an empty `Vec` in its place.
+    pub fn take_payload(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.payload)
     }
 }
 
@@ -101,22 +79,25 @@ mod tests {
 
     #[test]
     fn packet_encode_decode_roundtrip() {
-        let p = Packet::data(123, Bytes::from_static(b"hello"));
-        let encoded = p.clone().encode().unwrap();
-        let decoded = Packet::decode(encoded).unwrap();
+        let p = Packet::data(123, Vec::from(&b"hello"[..]));
+        let encoded = p.encode_to_bytes();
+        let decoded = Packet::decode_from_bytes(&encoded).unwrap();
         assert_eq!(decoded.stream_id, 123);
         assert_eq!(decoded.kind, frame_kind::DATA);
-        assert_eq!(decoded.payload, Bytes::from_static(b"hello"));
+        assert_eq!(decoded.payload, b"hello");
     }
 
     #[test]
-    fn packet_decode_too_short() {
-        let err = Packet::decode(Bytes::from_static(b"\x01\x02\x03\x04")).unwrap_err();
-        assert_eq!(err, PacketDecodeError::TooShort { len: 4 });
+    fn rst_stream_carries_error_code() {
+        let p = Packet::rst_stream(7, StatusCode::Cancelled as u32);
+        let encoded = p.encode_to_bytes();
+        let decoded = Packet::decode_from_bytes(&encoded).unwrap();
+        assert_eq!(decoded.stream_id, 7);
+        assert_eq!(decoded.kind, frame_kind::RST_STREAM);
+        assert_eq!(decoded.error_code, StatusCode::Cancelled as u32);
+        assert!(decoded.payload.is_empty());
     }
 }
-
-include!("../gen/forpc.rs");
 
 impl Call {
     pub fn new(method: impl Into<String>) -> Self {

@@ -229,4 +229,127 @@ export namespace forpc {
          */
         public static getTypeUrl(typeUrlPrefix?: string): string;
     }
+
+    /** FrameKind enum. */
+    enum FrameKind {
+        HEADERS = 0,
+        DATA = 1,
+        TRAILERS = 2,
+        RST_STREAM = 3
+    }
+
+    /** Properties of a Packet. */
+    interface IPacket {
+
+        /** Packet streamId */
+        streamId?: (number|null);
+
+        /** Packet kind */
+        kind?: (forpc.FrameKind|null);
+
+        /** Packet payload */
+        payload?: (Uint8Array|null);
+
+        /** Packet errorCode */
+        errorCode?: (number|null);
+    }
+
+    /** Represents a Packet. */
+    class Packet implements IPacket {
+
+        /**
+         * Constructs a new Packet.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: forpc.IPacket);
+
+        /** Packet streamId. */
+        public streamId: number;
+
+        /** Packet kind. */
+        public kind: forpc.FrameKind;
+
+        /** Packet payload. */
+        public payload: Uint8Array;
+
+        /** Packet errorCode. */
+        public errorCode: number;
+
+        /**
+         * Creates a new Packet instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns Packet instance
+         */
+        public static create(properties?: forpc.IPacket): forpc.Packet;
+
+        /**
+         * Encodes the specified Packet message. Does not implicitly {@link forpc.Packet.verify|verify} messages.
+         * @param message Packet message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: forpc.IPacket, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified Packet message, length delimited. Does not implicitly {@link forpc.Packet.verify|verify} messages.
+         * @param message Packet message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: forpc.IPacket, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a Packet message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns Packet
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): forpc.Packet;
+
+        /**
+         * Decodes a Packet message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns Packet
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): forpc.Packet;
+
+        /**
+         * Verifies a Packet message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a Packet message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns Packet
+         */
+        public static fromObject(object: { [k: string]: any }): forpc.Packet;
+
+        /**
+         * Creates a plain object from a Packet message. Also converts values to other types if specified.
+         * @param message Packet
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: forpc.Packet, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this Packet to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+
+        /**
+         * Gets the default type url for Packet
+         * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns The default type url
+         */
+        public static getTypeUrl(typeUrlPrefix?: string): string;
+    }
 }
