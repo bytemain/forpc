@@ -649,6 +649,337 @@ $root.forpc = (function() {
         return Status;
     })();
 
+    /**
+     * FrameKind enum.
+     * @name forpc.FrameKind
+     * @enum {number}
+     * @property {number} HEADERS=0 HEADERS value
+     * @property {number} DATA=1 DATA value
+     * @property {number} TRAILERS=2 TRAILERS value
+     * @property {number} RST_STREAM=3 RST_STREAM value
+     */
+    forpc.FrameKind = (function() {
+        var valuesById = {}, values = Object.create(valuesById);
+        values[valuesById[0] = "HEADERS"] = 0;
+        values[valuesById[1] = "DATA"] = 1;
+        values[valuesById[2] = "TRAILERS"] = 2;
+        values[valuesById[3] = "RST_STREAM"] = 3;
+        return values;
+    })();
+
+    forpc.Packet = (function() {
+
+        /**
+         * Properties of a Packet.
+         * @memberof forpc
+         * @interface IPacket
+         * @property {number|null} [streamId] Packet streamId
+         * @property {forpc.FrameKind|null} [kind] Packet kind
+         * @property {Uint8Array|null} [payload] Packet payload
+         * @property {number|null} [errorCode] Packet errorCode
+         */
+
+        /**
+         * Constructs a new Packet.
+         * @memberof forpc
+         * @classdesc Represents a Packet.
+         * @implements IPacket
+         * @constructor
+         * @param {forpc.IPacket=} [properties] Properties to set
+         */
+        function Packet(properties) {
+            if (properties)
+                for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * Packet streamId.
+         * @member {number} streamId
+         * @memberof forpc.Packet
+         * @instance
+         */
+        Packet.prototype.streamId = 0;
+
+        /**
+         * Packet kind.
+         * @member {forpc.FrameKind} kind
+         * @memberof forpc.Packet
+         * @instance
+         */
+        Packet.prototype.kind = 0;
+
+        /**
+         * Packet payload.
+         * @member {Uint8Array} payload
+         * @memberof forpc.Packet
+         * @instance
+         */
+        Packet.prototype.payload = $util.newBuffer([]);
+
+        /**
+         * Packet errorCode.
+         * @member {number} errorCode
+         * @memberof forpc.Packet
+         * @instance
+         */
+        Packet.prototype.errorCode = 0;
+
+        /**
+         * Creates a new Packet instance using the specified properties.
+         * @function create
+         * @memberof forpc.Packet
+         * @static
+         * @param {forpc.IPacket=} [properties] Properties to set
+         * @returns {forpc.Packet} Packet instance
+         */
+        Packet.create = function create(properties) {
+            return new Packet(properties);
+        };
+
+        /**
+         * Encodes the specified Packet message. Does not implicitly {@link forpc.Packet.verify|verify} messages.
+         * @function encode
+         * @memberof forpc.Packet
+         * @static
+         * @param {forpc.IPacket} message Packet message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Packet.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.streamId != null && Object.hasOwnProperty.call(message, "streamId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.streamId);
+            if (message.kind != null && Object.hasOwnProperty.call(message, "kind"))
+                writer.uint32(/* id 2, wireType 0 =*/16).int32(message.kind);
+            if (message.payload != null && Object.hasOwnProperty.call(message, "payload"))
+                writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.payload);
+            if (message.errorCode != null && Object.hasOwnProperty.call(message, "errorCode"))
+                writer.uint32(/* id 4, wireType 0 =*/32).uint32(message.errorCode);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified Packet message, length delimited. Does not implicitly {@link forpc.Packet.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof forpc.Packet
+         * @static
+         * @param {forpc.IPacket} message Packet message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Packet.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a Packet message from the specified reader or buffer.
+         * @function decode
+         * @memberof forpc.Packet
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {forpc.Packet} Packet
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Packet.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            var end = length === undefined ? reader.len : reader.pos + length, message = new $root.forpc.Packet();
+            while (reader.pos < end) {
+                var tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.streamId = reader.uint32();
+                        break;
+                    }
+                case 2: {
+                        message.kind = reader.int32();
+                        break;
+                    }
+                case 3: {
+                        message.payload = reader.bytes();
+                        break;
+                    }
+                case 4: {
+                        message.errorCode = reader.uint32();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a Packet message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof forpc.Packet
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {forpc.Packet} Packet
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Packet.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a Packet message.
+         * @function verify
+         * @memberof forpc.Packet
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        Packet.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.streamId != null && message.hasOwnProperty("streamId"))
+                if (!$util.isInteger(message.streamId))
+                    return "streamId: integer expected";
+            if (message.kind != null && message.hasOwnProperty("kind"))
+                switch (message.kind) {
+                default:
+                    return "kind: enum value expected";
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                    break;
+                }
+            if (message.payload != null && message.hasOwnProperty("payload"))
+                if (!(message.payload && typeof message.payload.length === "number" || $util.isString(message.payload)))
+                    return "payload: buffer expected";
+            if (message.errorCode != null && message.hasOwnProperty("errorCode"))
+                if (!$util.isInteger(message.errorCode))
+                    return "errorCode: integer expected";
+            return null;
+        };
+
+        /**
+         * Creates a Packet message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof forpc.Packet
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {forpc.Packet} Packet
+         */
+        Packet.fromObject = function fromObject(object) {
+            if (object instanceof $root.forpc.Packet)
+                return object;
+            var message = new $root.forpc.Packet();
+            if (object.streamId != null)
+                message.streamId = object.streamId >>> 0;
+            switch (object.kind) {
+            default:
+                if (typeof object.kind === "number") {
+                    message.kind = object.kind;
+                    break;
+                }
+                break;
+            case "HEADERS":
+            case 0:
+                message.kind = 0;
+                break;
+            case "DATA":
+            case 1:
+                message.kind = 1;
+                break;
+            case "TRAILERS":
+            case 2:
+                message.kind = 2;
+                break;
+            case "RST_STREAM":
+            case 3:
+                message.kind = 3;
+                break;
+            }
+            if (object.payload != null)
+                if (typeof object.payload === "string")
+                    $util.base64.decode(object.payload, message.payload = $util.newBuffer($util.base64.length(object.payload)), 0);
+                else if (object.payload.length >= 0)
+                    message.payload = object.payload;
+            if (object.errorCode != null)
+                message.errorCode = object.errorCode >>> 0;
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a Packet message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof forpc.Packet
+         * @static
+         * @param {forpc.Packet} message Packet
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        Packet.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            var object = {};
+            if (options.defaults) {
+                object.streamId = 0;
+                object.kind = options.enums === String ? "HEADERS" : 0;
+                if (options.bytes === String)
+                    object.payload = "";
+                else {
+                    object.payload = [];
+                    if (options.bytes !== Array)
+                        object.payload = $util.newBuffer(object.payload);
+                }
+                object.errorCode = 0;
+            }
+            if (message.streamId != null && message.hasOwnProperty("streamId"))
+                object.streamId = message.streamId;
+            if (message.kind != null && message.hasOwnProperty("kind"))
+                object.kind = options.enums === String ? $root.forpc.FrameKind[message.kind] === undefined ? message.kind : $root.forpc.FrameKind[message.kind] : message.kind;
+            if (message.payload != null && message.hasOwnProperty("payload"))
+                object.payload = options.bytes === String ? $util.base64.encode(message.payload, 0, message.payload.length) : options.bytes === Array ? Array.prototype.slice.call(message.payload) : message.payload;
+            if (message.errorCode != null && message.hasOwnProperty("errorCode"))
+                object.errorCode = message.errorCode;
+            return object;
+        };
+
+        /**
+         * Converts this Packet to JSON.
+         * @function toJSON
+         * @memberof forpc.Packet
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        Packet.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for Packet
+         * @function getTypeUrl
+         * @memberof forpc.Packet
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        Packet.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/forpc.Packet";
+        };
+
+        return Packet;
+    })();
+
     return forpc;
 })();
 

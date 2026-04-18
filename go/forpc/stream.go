@@ -1,7 +1,6 @@
 package forpc
 
 import (
-	"encoding/binary"
 	"errors"
 	"sync"
 
@@ -13,7 +12,7 @@ import (
 type BidiStream[Req any, Resp any] struct {
 	streamID uint32
 	peer     *RpcPeer
-	recvCh   <-chan Packet
+	recvCh   <-chan *Packet
 	mu       sync.Mutex
 	closed   bool
 }
@@ -27,7 +26,7 @@ func (s *BidiStream[Req, Resp]) Send(msg *Req) error {
 	if err != nil {
 		return err
 	}
-	return s.peer.sendPacket(Packet{StreamID: s.streamID, Kind: FrameData, Payload: payload})
+	return s.peer.sendPacket(DataPacket(s.streamID, payload))
 }
 
 func (s *BidiStream[Req, Resp]) Recv() (*Resp, error) {
@@ -68,19 +67,16 @@ func (s *BidiStream[Req, Resp]) CloseSend() error {
 	}
 	s.closed = true
 	s.mu.Unlock()
-	st := &pb.Status{Code: pb.StatusCode_OK, Message: "OK"}
-	payload, err := proto.Marshal(st)
+	pkt, err := TrailersPacket(s.streamID, &pb.Status{Code: pb.StatusCode_OK, Message: "OK"})
 	if err != nil {
 		return err
 	}
-	return s.peer.sendPacket(Packet{StreamID: s.streamID, Kind: FrameTrailers, Payload: payload})
+	return s.peer.sendPacket(pkt)
 }
 
 // Cancel sends a RST_STREAM frame to the remote peer, signaling cancellation.
 // This removes the pending call and notifies the server to stop processing.
 func (s *BidiStream[Req, Resp]) Cancel() {
 	s.peer.removePending(s.streamID)
-	payload := make([]byte, 4)
-	binary.BigEndian.PutUint32(payload, uint32(pb.StatusCode_CANCELLED))
-	_ = s.peer.sendPacket(Packet{StreamID: s.streamID, Kind: FrameRstStream, Payload: payload})
+	_ = s.peer.sendPacket(RstStreamPacket(s.streamID, uint32(pb.StatusCode_CANCELLED)))
 }

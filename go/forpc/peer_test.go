@@ -1,7 +1,6 @@
 package forpc
 
 import (
-	"encoding/binary"
 	"errors"
 	"testing"
 	"time"
@@ -175,7 +174,7 @@ func TestBidiStreamInproc(t *testing.T) {
 				if err != nil {
 					return ResponseError(pb.StatusCode_INTERNAL, err.Error())
 				}
-				_ = peer.sendPacket(Packet{StreamID: r.StreamID, Kind: FrameData, Payload: out})
+				_ = peer.sendPacket(&Packet{StreamId: r.StreamID, Kind: FrameData, Payload: out})
 			}
 			return ResponseOK(nil)
 		})
@@ -305,10 +304,8 @@ func TestRstStreamCancelsServerHandler(t *testing.T) {
 func TestRstStreamPacketRoundtrip(t *testing.T) {
 	streamID := uint32(42)
 	errorCode := uint32(pb.StatusCode_CANCELLED)
-	payload := make([]byte, 4)
-	binary.BigEndian.PutUint32(payload, errorCode)
-	pkt := Packet{StreamID: streamID, Kind: FrameRstStream, Payload: payload}
-	encoded, err := pkt.Encode()
+	pkt := RstStreamPacket(streamID, errorCode)
+	encoded, err := EncodePacket(pkt)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -316,18 +313,17 @@ func TestRstStreamPacketRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if decoded.StreamID != streamID {
-		t.Fatalf("expected stream_id %d, got %d", streamID, decoded.StreamID)
+	if decoded.StreamId != streamID {
+		t.Fatalf("expected stream_id %d, got %d", streamID, decoded.StreamId)
 	}
 	if decoded.Kind != FrameRstStream {
 		t.Fatalf("expected kind %d, got %d", FrameRstStream, decoded.Kind)
 	}
-	if len(decoded.Payload) != 4 {
-		t.Fatalf("expected 4 bytes payload, got %d", len(decoded.Payload))
+	if len(decoded.Payload) != 0 {
+		t.Fatalf("expected empty payload, got %d bytes", len(decoded.Payload))
 	}
-	decodedCode := binary.BigEndian.Uint32(decoded.Payload)
-	if decodedCode != errorCode {
-		t.Fatalf("expected error code %d, got %d", errorCode, decodedCode)
+	if decoded.ErrorCode != errorCode {
+		t.Fatalf("expected error code %d, got %d", errorCode, decoded.ErrorCode)
 	}
 }
 
@@ -345,9 +341,9 @@ func TestReadPayload(t *testing.T) {
 	}
 
 	// ReadPayload extracts DATA frame from Stream channel.
-	ch := make(chan Packet, 2)
-	ch <- Packet{Kind: FrameData, Payload: []byte("from-stream")}
-	ch <- Packet{Kind: FrameTrailers, Payload: []byte{}}
+	ch := make(chan *Packet, 2)
+	ch <- &Packet{Kind: FrameData, Payload: []byte("from-stream")}
+	ch <- &Packet{Kind: FrameTrailers, Payload: []byte{}}
 	close(ch)
 	r3 := &Request{Stream: ch}
 	if got := r3.ReadPayload(); string(got) != "from-stream" {

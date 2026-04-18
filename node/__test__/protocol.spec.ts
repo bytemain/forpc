@@ -34,25 +34,28 @@ test('StatusCode constants match Rust/Go', (t) => {
 })
 
 test('Packet encode/decode roundtrip', (t) => {
-  const packet = { streamId: 123, kind: FrameKind.DATA, payload: Buffer.from('hello') }
+  const packet = { streamId: 123, kind: FrameKind.DATA, payload: Buffer.from('hello'), errorCode: 0 }
   const encoded = encodePacket(packet)
-  t.is(encoded.length, 5 + 5) // 4 bytes streamId + 1 byte kind + 5 bytes payload
   const decoded = decodePacket(encoded)
   t.is(decoded.streamId, 123)
   t.is(decoded.kind, FrameKind.DATA)
   t.deepEqual(decoded.payload, Buffer.from('hello'))
 })
 
-test('Packet decode rejects short data', (t) => {
-  t.throws(() => decodePacket(Buffer.from([1, 2, 3, 4])), {
-    message: /packet too short/,
-  })
+test('Packet decode handles arbitrary bytes via protobuf', (t) => {
+  // With protobuf framing there is no fixed-length header; protobuf will
+  // either successfully parse arbitrary bytes (yielding default field values
+  // for unknown tags) or throw. Either way it should not panic and an empty
+  // input must decode to a default packet with streamId 0.
+  const decoded = decodePacket(Buffer.alloc(0))
+  t.is(decoded.streamId, 0)
+  t.is(decoded.kind, FrameKind.HEADERS)
+  t.is(decoded.payload.length, 0)
 })
 
 test('Packet with empty payload', (t) => {
-  const packet = { streamId: 1, kind: FrameKind.HEADERS, payload: Buffer.alloc(0) }
+  const packet = { streamId: 1, kind: FrameKind.HEADERS, payload: Buffer.alloc(0), errorCode: 0 }
   const encoded = encodePacket(packet)
-  t.is(encoded.length, 5)
   const decoded = decodePacket(encoded)
   t.is(decoded.streamId, 1)
   t.is(decoded.kind, FrameKind.HEADERS)
@@ -146,8 +149,8 @@ test('rstStreamPacket helper', (t) => {
   const packet = rstStreamPacket(42, StatusCode.CANCELLED)
   t.is(packet.streamId, 42)
   t.is(packet.kind, FrameKind.RST_STREAM)
-  t.is(packet.payload.length, 4)
-  t.is(packet.payload.readUInt32BE(0), StatusCode.CANCELLED)
+  t.is(packet.payload.length, 0)
+  t.is(packet.errorCode, StatusCode.CANCELLED)
 })
 
 test('RST_STREAM packet encode/decode roundtrip', (t) => {
@@ -156,6 +159,6 @@ test('RST_STREAM packet encode/decode roundtrip', (t) => {
   const decoded = decodePacket(encoded)
   t.is(decoded.streamId, 99)
   t.is(decoded.kind, FrameKind.RST_STREAM)
-  t.is(decoded.payload.length, 4)
-  t.is(decoded.payload.readUInt32BE(0), StatusCode.CANCELLED)
+  t.is(decoded.payload.length, 0)
+  t.is(decoded.errorCode, StatusCode.CANCELLED)
 })

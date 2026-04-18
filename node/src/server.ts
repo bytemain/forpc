@@ -218,9 +218,13 @@ export class RawServer {
         try {
           const msg = await this.router.recv()
           const body = msg.body()
-          if (body.length < 5) continue
 
-          const packet = decodePacket(body)
+          let packet
+          try {
+            packet = decodePacket(body)
+          } catch {
+            continue
+          }
           if (packet.streamId === 0) continue
 
           await this.handlePacket(packet, msg)

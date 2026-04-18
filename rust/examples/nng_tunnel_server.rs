@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
 
+use bytes::Bytes;
 use forpc::{Request, Response, RpcListener, RpcPeer, Status, StatusCode};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -62,7 +63,7 @@ async fn tunnel_tcp(req: Request, peer: Arc<RpcPeer>) -> Response {
         while let Some(pkt) = rx.recv().await {
             match pkt.kind {
                 forpc::rpc::protocol::frame_kind::DATA => {
-                    let chunk: TcpChunk = peer_in.user_deserialize(&pkt.payload).await?;
+                    let chunk: TcpChunk = peer_in.user_deserialize(&Bytes::from(pkt.payload)).await?;
                     if !chunk.data.is_empty() {
                         w.write_all(&chunk.data).await.map_err(|e| {
                             forpc::RpcError::new(StatusCode::Unavailable, e.to_string())

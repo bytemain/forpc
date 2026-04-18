@@ -112,6 +112,60 @@ func (StatusCode) EnumDescriptor() ([]byte, []int) {
 	return file_forpc_proto_rawDescGZIP(), []int{0}
 }
 
+// FrameKind identifies the type of a Packet frame on the wire.
+// Values are stable and must match across Rust/Go/Node implementations.
+type FrameKind int32
+
+const (
+	FrameKind_HEADERS    FrameKind = 0
+	FrameKind_DATA       FrameKind = 1
+	FrameKind_TRAILERS   FrameKind = 2
+	FrameKind_RST_STREAM FrameKind = 3
+)
+
+// Enum value maps for FrameKind.
+var (
+	FrameKind_name = map[int32]string{
+		0: "HEADERS",
+		1: "DATA",
+		2: "TRAILERS",
+		3: "RST_STREAM",
+	}
+	FrameKind_value = map[string]int32{
+		"HEADERS":    0,
+		"DATA":       1,
+		"TRAILERS":   2,
+		"RST_STREAM": 3,
+	}
+)
+
+func (x FrameKind) Enum() *FrameKind {
+	p := new(FrameKind)
+	*p = x
+	return p
+}
+
+func (x FrameKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FrameKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_forpc_proto_enumTypes[1].Descriptor()
+}
+
+func (FrameKind) Type() protoreflect.EnumType {
+	return &file_forpc_proto_enumTypes[1]
+}
+
+func (x FrameKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FrameKind.Descriptor instead.
+func (FrameKind) EnumDescriptor() ([]byte, []int) {
+	return file_forpc_proto_rawDescGZIP(), []int{1}
+}
+
 type Call struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Method        string                 `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
@@ -216,6 +270,85 @@ func (x *Status) GetMessage() string {
 	return ""
 }
 
+// Packet is the unit of transmission on the underlying transport.
+// All fields are encoded with standard protobuf semantics; there is no
+// hand-written framing on top of this message.
+type Packet struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Stream identifier. Stream id 0 is reserved and ignored.
+	StreamId uint32 `protobuf:"varint,1,opt,name=stream_id,json=streamId,proto3" json:"stream_id,omitempty"`
+	// Frame kind.
+	Kind FrameKind `protobuf:"varint,2,opt,name=kind,proto3,enum=forpc.FrameKind" json:"kind,omitempty"`
+	// Frame payload.
+	// - HEADERS:    encoded Call message
+	// - DATA:       user payload bytes
+	// - TRAILERS:   encoded Status message
+	// - RST_STREAM: empty (see error_code)
+	Payload []byte `protobuf:"bytes,3,opt,name=payload,proto3" json:"payload,omitempty"`
+	// Error code for RST_STREAM frames. Unused for other frame kinds.
+	ErrorCode     uint32 `protobuf:"varint,4,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Packet) Reset() {
+	*x = Packet{}
+	mi := &file_forpc_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Packet) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Packet) ProtoMessage() {}
+
+func (x *Packet) ProtoReflect() protoreflect.Message {
+	mi := &file_forpc_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Packet.ProtoReflect.Descriptor instead.
+func (*Packet) Descriptor() ([]byte, []int) {
+	return file_forpc_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Packet) GetStreamId() uint32 {
+	if x != nil {
+		return x.StreamId
+	}
+	return 0
+}
+
+func (x *Packet) GetKind() FrameKind {
+	if x != nil {
+		return x.Kind
+	}
+	return FrameKind_HEADERS
+}
+
+func (x *Packet) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *Packet) GetErrorCode() uint32 {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return 0
+}
+
 var File_forpc_proto protoreflect.FileDescriptor
 
 const file_forpc_proto_rawDesc = "" +
@@ -229,7 +362,13 @@ const file_forpc_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"I\n" +
 	"\x06Status\x12%\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x11.forpc.StatusCodeR\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage*\xbd\x02\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x84\x01\n" +
+	"\x06Packet\x12\x1b\n" +
+	"\tstream_id\x18\x01 \x01(\rR\bstreamId\x12$\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x10.forpc.FrameKindR\x04kind\x12\x18\n" +
+	"\apayload\x18\x03 \x01(\fR\apayload\x12\x1d\n" +
+	"\n" +
+	"error_code\x18\x04 \x01(\rR\terrorCode*\xbd\x02\n" +
 	"\n" +
 	"StatusCode\x12\x06\n" +
 	"\x02OK\x10\x00\x12\r\n" +
@@ -249,7 +388,13 @@ const file_forpc_proto_rawDesc = "" +
 	"\bINTERNAL\x10\r\x12\x0f\n" +
 	"\vUNAVAILABLE\x10\x0e\x12\r\n" +
 	"\tDATA_LOSS\x10\x0f\x12\x13\n" +
-	"\x0fUNAUTHENTICATED\x10\x10B'Z%github.com/bytemain/forpc/go/forpc/pbb\x06proto3"
+	"\x0fUNAUTHENTICATED\x10\x10*@\n" +
+	"\tFrameKind\x12\v\n" +
+	"\aHEADERS\x10\x00\x12\b\n" +
+	"\x04DATA\x10\x01\x12\f\n" +
+	"\bTRAILERS\x10\x02\x12\x0e\n" +
+	"\n" +
+	"RST_STREAM\x10\x03B'Z%github.com/bytemain/forpc/go/forpc/pbb\x06proto3"
 
 var (
 	file_forpc_proto_rawDescOnce sync.Once
@@ -263,22 +408,25 @@ func file_forpc_proto_rawDescGZIP() []byte {
 	return file_forpc_proto_rawDescData
 }
 
-var file_forpc_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_forpc_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_forpc_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_forpc_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_forpc_proto_goTypes = []any{
 	(StatusCode)(0), // 0: forpc.StatusCode
-	(*Call)(nil),    // 1: forpc.Call
-	(*Status)(nil),  // 2: forpc.Status
-	nil,             // 3: forpc.Call.MetadataEntry
+	(FrameKind)(0),  // 1: forpc.FrameKind
+	(*Call)(nil),    // 2: forpc.Call
+	(*Status)(nil),  // 3: forpc.Status
+	(*Packet)(nil),  // 4: forpc.Packet
+	nil,             // 5: forpc.Call.MetadataEntry
 }
 var file_forpc_proto_depIdxs = []int32{
-	3, // 0: forpc.Call.metadata:type_name -> forpc.Call.MetadataEntry
+	5, // 0: forpc.Call.metadata:type_name -> forpc.Call.MetadataEntry
 	0, // 1: forpc.Status.code:type_name -> forpc.StatusCode
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	1, // 2: forpc.Packet.kind:type_name -> forpc.FrameKind
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_forpc_proto_init() }
@@ -291,8 +439,8 @@ func file_forpc_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_forpc_proto_rawDesc), len(file_forpc_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   3,
+			NumEnums:      2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

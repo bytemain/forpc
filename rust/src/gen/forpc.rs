@@ -16,6 +16,28 @@ pub struct Status {
     #[prost(string, tag = "2")]
     pub message: ::prost::alloc::string::String,
 }
+/// Packet is the unit of transmission on the underlying transport.
+/// All fields are encoded with standard protobuf semantics; there is no
+/// hand-written framing on top of this message.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Packet {
+    /// Stream identifier. Stream id 0 is reserved and ignored.
+    #[prost(uint32, tag = "1")]
+    pub stream_id: u32,
+    /// Frame kind.
+    #[prost(enumeration = "FrameKind", tag = "2")]
+    pub kind: i32,
+    /// Frame payload.
+    /// - HEADERS:    encoded Call message
+    /// - DATA:       user payload bytes
+    /// - TRAILERS:   encoded Status message
+    /// - RST_STREAM: empty (see error_code)
+    #[prost(bytes = "vec", tag = "3")]
+    pub payload: ::prost::alloc::vec::Vec<u8>,
+    /// Error code for RST_STREAM frames. Unused for other frame kinds.
+    #[prost(uint32, tag = "4")]
+    pub error_code: u32,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum StatusCode {
@@ -83,6 +105,40 @@ impl StatusCode {
             "UNAVAILABLE" => Some(Self::Unavailable),
             "DATA_LOSS" => Some(Self::DataLoss),
             "UNAUTHENTICATED" => Some(Self::Unauthenticated),
+            _ => None,
+        }
+    }
+}
+/// FrameKind identifies the type of a Packet frame on the wire.
+/// Values are stable and must match across Rust/Go/Node implementations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum FrameKind {
+    Headers = 0,
+    Data = 1,
+    Trailers = 2,
+    RstStream = 3,
+}
+impl FrameKind {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Headers => "HEADERS",
+            Self::Data => "DATA",
+            Self::Trailers => "TRAILERS",
+            Self::RstStream => "RST_STREAM",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "HEADERS" => Some(Self::Headers),
+            "DATA" => Some(Self::Data),
+            "TRAILERS" => Some(Self::Trailers),
+            "RST_STREAM" => Some(Self::RstStream),
             _ => None,
         }
     }

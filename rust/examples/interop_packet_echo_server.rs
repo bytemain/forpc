@@ -5,24 +5,8 @@ use std::sync::Arc;
 use bytes::Bytes;
 use tokio::sync::{mpsc, Mutex};
 
+use forpc::rpc::protocol::Packet;
 use forpc::transport::nng::{AsyncRouter, InboundFrame, ServerTransport, Transport};
-
-fn decode_packet(data: &[u8]) -> Option<(u32, u8, &[u8])> {
-    if data.len() < 5 {
-        return None;
-    }
-    let stream_id = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
-    let kind = data[4];
-    Some((stream_id, kind, &data[5..]))
-}
-
-fn encode_packet(stream_id: u32, kind: u8, payload: &[u8]) -> Bytes {
-    let mut out = Vec::with_capacity(5 + payload.len());
-    out.extend_from_slice(&stream_id.to_be_bytes());
-    out.push(kind);
-    out.extend_from_slice(payload);
-    Bytes::from(out)
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -69,11 +53,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 async fn echo_loop(transport: ServerTransport) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     loop {
         let data = transport.recv().await?;
-        let (stream_id, kind, payload) = match decode_packet(&data) {
-            Some(v) => v,
-            None => continue,
+        let packet = match Packet::decode_from_bytes(&data) {
+            Ok(p) => p,
+            Err(_) => continue,
         };
-        let out = encode_packet(stream_id, kind, payload);
-        transport.send(out).await?;
+        transport.send(packet.encode_to_bytes()).await?;
     }
 }
