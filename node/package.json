@@ -109,6 +109,6 @@
     "arrowParens": "always"
   },
   "dependencies": {
-    "protobufjs": "^7.5.5"
+    "protobufjs": "^7.6.1"
   }
 }
