@@ -40,7 +40,7 @@ jobs:
         working-directory: ./node
 
       - name: Cache cargo
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index/
